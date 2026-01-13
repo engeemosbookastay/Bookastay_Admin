@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FiCalendar, FiTrash2, FiUsers, FiHome, FiAlertCircle, FiCheckCircle, FiXCircle, FiPlus, FiRefreshCw } from 'react-icons/fi';
+import { backendUrl } from '../App';
 
 const Hero = () => {
   const [activeTab, setActiveTab] = useState('block');
@@ -15,7 +16,8 @@ const Hero = () => {
     reason: ''
   });
 
-  const API_URL = 'https://bookastay-backend-zuwa.onrender.com/api';
+  // const API_URL = 'https://bookastay-backend-zuwa.onrender.com/api';
+  const API_URL = 'http://localhost:4000/api';
 
   // Fetch all bookings
   const fetchBookings = async () => {
