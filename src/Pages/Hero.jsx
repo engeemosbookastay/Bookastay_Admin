@@ -16,8 +16,8 @@ const Hero = () => {
     reason: ''
   });
 
-  // const API_URL = 'https://bookastay-backend-zuwa.onrender.com/api';
-  const API_URL = 'http://localhost:4000/api';
+  const API_URL = 'https://bookastay-backend-zuwa.onrender.com/api';
+  // const API_URL = 'http://localhost:4000/api';
 
   // Fetch all bookings
   const fetchBookings = async () => {
