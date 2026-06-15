@@ -3,11 +3,51 @@ import {
   FiCalendar, FiTrash2, FiUsers, FiHome, FiAlertCircle,
   FiCheckCircle, FiXCircle, FiPlus, FiRefreshCw, FiEdit2,
   FiTag, FiImage, FiFileText, FiDollarSign, FiToggleLeft, FiToggleRight,
-  FiSave, FiUpload, FiX
+  FiSave, FiUpload, FiX,
+  FiWifi, FiWind, FiMonitor, FiZap, FiShield, FiActivity,
+  FiBriefcase, FiSun, FiDroplet, FiCoffee, FiMapPin, FiAnchor, FiSliders
 } from 'react-icons/fi';
 
-const API_URL = 'https://bookastay-backend-zuwa.onrender.com/api';
-// const API_URL = 'http://localhost:4000/api';
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:4000') + '/api';
+
+const AMENITY_OPTIONS = [
+  { name: 'High-Speed WiFi',          Icon: FiWifi },
+  { name: 'Full Kitchen',             Icon: FiCoffee },
+  { name: 'Shared Kitchen',           Icon: FiCoffee },
+  { name: 'Air Conditioning',         Icon: FiWind },
+  { name: 'Smart TV',                 Icon: FiMonitor },
+  { name: 'DSTV / Cable TV',          Icon: FiMonitor },
+  { name: 'Free Parking',             Icon: FiMapPin },
+  { name: 'Private Balcony',          Icon: FiSun },
+  { name: 'Private Bathroom',         Icon: FiDroplet },
+  { name: 'Washing Machine',          Icon: FiRefreshCw },
+  { name: 'Generator / Backup Power', Icon: FiZap },
+  { name: 'Security / Gated',         Icon: FiShield },
+  { name: 'Swimming Pool',            Icon: FiAnchor },
+  { name: 'Gym / Fitness',            Icon: FiActivity },
+  { name: 'Work Desk',                Icon: FiBriefcase },
+  { name: 'Iron & Board',             Icon: FiSliders },
+];
+
+const AmenitiesPicker = ({ selected = [], onChange }) => {
+  const toggle = (name) =>
+    onChange(selected.includes(name) ? selected.filter(a => a !== name) : [...selected, name]);
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {AMENITY_OPTIONS.map(({ name, Icon }) => (
+        <label key={name}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition select-none
+            ${selected.includes(name)
+              ? 'bg-purple-600/40 border-purple-400 text-white'
+              : 'bg-white/5 border-white/20 text-purple-200 hover:border-white/40'}`}>
+          <input type="checkbox" checked={selected.includes(name)} onChange={() => toggle(name)} className="sr-only" />
+          <Icon size={14} className="shrink-0" />
+          <span className="text-xs font-medium">{name}</span>
+        </label>
+      ))}
+    </div>
+  );
+};
 
 // ─── Reusable alert ───────────────────────────────────────────────
 const Alert = ({ message, type }) => {
@@ -226,7 +266,8 @@ const PropertiesTab = ({ showMessage }) => {
 
   const startEdit = (p) => {
     setEditing(p.room_key);
-    setForm({ ...p, amenities: JSON.stringify(p.amenities || []) });
+    const amenityNames = (p.amenities || []).map(a => typeof a === 'string' ? a : a.name);
+    setForm({ ...p, amenities: amenityNames });
     setShowAddForm(false);
   };
 
@@ -237,8 +278,7 @@ const PropertiesTab = ({ showMessage }) => {
     const url = isNew ? `${API_URL}/admin/properties` : `${API_URL}/admin/properties/${editing}`;
     const method = isNew ? 'POST' : 'PUT';
 
-    let amenities = [];
-    try { amenities = JSON.parse(form.amenities || '[]'); } catch { amenities = []; }
+    const amenities = (form.amenities || []).map(name => ({ name }));
 
     setLoading(true);
     try {
@@ -248,8 +288,15 @@ const PropertiesTab = ({ showMessage }) => {
       });
       const d = await res.json();
       if (d.success) {
-        showMessage('success', isNew ? 'Property created!' : 'Property updated!');
-        setEditing(null); setForm({}); setShowAddForm(false); fetch_();
+        showMessage('success', isNew ? 'Property created! You can now upload images below.' : 'Property updated!');
+        if (isNew) {
+          // Stay in edit mode so images can be uploaded immediately
+          setEditing(form.room_key);
+          setShowAddForm(false);
+        } else {
+          setEditing(null); setForm({}); setShowAddForm(false);
+        }
+        fetch_();
       } else showMessage('error', d.message);
     } catch { showMessage('error', 'Save failed'); }
     finally { setLoading(false); }
@@ -304,42 +351,6 @@ const PropertiesTab = ({ showMessage }) => {
     { label: 'Sort Order', field: 'sort_order', type: 'number' },
   ];
 
-  const EditForm = () => (
-    <div className="bg-white/5 border border-white/20 rounded-xl p-6 space-y-4">
-      <h3 className="text-white font-bold text-lg">{editing ? 'Edit Property' : 'Add New Property'}</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {fields.map(({ label, field, type, disabled }) => (
-          <div key={field}>
-            <label className="block text-purple-200 text-sm mb-1">{label}</label>
-            <input type={type || 'text'} value={form[field] || ''} disabled={disabled}
-              onChange={e => setForm({ ...form, [field]: e.target.value })}
-              className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-purple-500" />
-          </div>
-        ))}
-      </div>
-      <div>
-        <label className="block text-purple-200 text-sm mb-1">Description</label>
-        <textarea value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} rows={3}
-          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500" />
-      </div>
-      <div>
-        <label className="block text-purple-200 text-sm mb-1">Amenities (JSON array of objects with "name" and "desc")</label>
-        <textarea value={form.amenities || '[]'} onChange={e => setForm({ ...form, amenities: e.target.value })} rows={3}
-          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-purple-500" />
-      </div>
-      <div className="flex gap-3">
-        <button onClick={handleSave} disabled={loading}
-          className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all flex items-center gap-2 disabled:opacity-50">
-          <FiSave /> {editing ? 'Save Changes' : 'Create Property'}
-        </button>
-        <button onClick={() => { cancelEdit(); setShowAddForm(false); }}
-          className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all">
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-
   return (
     <div className="space-y-6">
       {!editing && !showAddForm && (
@@ -349,7 +360,40 @@ const PropertiesTab = ({ showMessage }) => {
         </button>
       )}
 
-      {(editing || showAddForm) && <EditForm />}
+      {(editing || showAddForm) && (
+        <div className="bg-white/5 border border-white/20 rounded-xl p-6 space-y-4">
+          <h3 className="text-white font-bold text-lg">{editing ? 'Edit Property' : 'Add New Property'}</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {fields.map(({ label, field, type, disabled }) => (
+              <div key={field}>
+                <label className="block text-purple-200 text-sm mb-1">{label}</label>
+                <input type={type || 'text'} value={form[field] || ''} disabled={disabled}
+                  onChange={e => setForm({ ...form, [field]: e.target.value })}
+                  className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+            ))}
+          </div>
+          <div>
+            <label className="block text-purple-200 text-sm mb-1">Description</label>
+            <textarea value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} rows={3}
+              className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500" />
+          </div>
+          <div>
+            <label className="block text-purple-200 text-sm mb-2">Amenities — tick all that apply</label>
+            <AmenitiesPicker selected={form.amenities || []} onChange={v => setForm({ ...form, amenities: v })} />
+          </div>
+          <div className="flex gap-3">
+            <button onClick={handleSave} disabled={loading}
+              className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all flex items-center gap-2 disabled:opacity-50">
+              <FiSave /> {editing ? 'Save Changes' : 'Create Property'}
+            </button>
+            <button onClick={() => { cancelEdit(); setShowAddForm(false); }}
+              className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading && <div className="text-center text-purple-200">Loading...</div>}
 
