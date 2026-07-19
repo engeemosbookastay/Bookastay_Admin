@@ -10,6 +10,17 @@ import {
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:4000') + '/api';
 
+const authFetch = (url, opts = {}) => {
+  const token = sessionStorage.getItem('admin_token');
+  return fetch(url, {
+    ...opts,
+    headers: {
+      ...(opts.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+};
+
 const AMENITY_OPTIONS = [
   { name: 'High-Speed WiFi',          Icon: FiWifi },
   { name: 'Full Kitchen',             Icon: FiCoffee },
@@ -76,7 +87,7 @@ const BlockDatesTab = ({ showMessage }) => {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/admin/block-date`, {
+      const res = await authFetch(`${API_URL}/admin/block-date`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form)
       });
       const d = await res.json();
@@ -134,7 +145,7 @@ const BookingsTab = ({ showMessage }) => {
   const fetchBookings = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/admin/bookings`);
+      const res = await authFetch(`${API_URL}/admin/bookings`);
       const d = await res.json();
       if (d.success) setBookings(d.bookings.all || []);
       else showMessage('error', 'Failed to fetch bookings');
@@ -147,7 +158,7 @@ const BookingsTab = ({ showMessage }) => {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this booking?')) return;
     try {
-      const res = await fetch(`${API_URL}/admin/bookings/${id}`, { method: 'DELETE' });
+      const res = await authFetch(`${API_URL}/admin/bookings/${id}`, { method: 'DELETE' });
       const d = await res.json();
       if (d.success) { showMessage('success', 'Deleted!'); fetchBookings(); }
       else showMessage('error', d.message);
@@ -251,11 +262,13 @@ const PropertiesTab = ({ showMessage }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [imageFile, setImageFile] = useState(null);
   const [uploadingImage, setUploadingImage] = useState('');
+  const [pendingImages, setPendingImages] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState('');
 
   const fetch_ = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/admin/properties`);
+      const res = await authFetch(`${API_URL}/admin/properties`);
       const d = await res.json();
       if (d.success) setProperties(d.properties || []);
     } catch { showMessage('error', 'Failed to load properties'); }
@@ -271,7 +284,25 @@ const PropertiesTab = ({ showMessage }) => {
     setShowAddForm(false);
   };
 
-  const cancelEdit = () => { setEditing(null); setForm({}); };
+  const cancelEdit = () => { setEditing(null); setForm({}); setPendingImages([]); setUploadProgress(''); };
+
+  const handlePendingImageSelect = (e) => {
+    const files = Array.from(e.target.files);
+    setPendingImages(prev => [...prev, ...files]);
+    e.target.value = '';
+  };
+
+  const removePendingImage = (index) => {
+    setPendingImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const setPendingAsMain = (index) => {
+    setPendingImages(prev => {
+      const updated = [...prev];
+      const [item] = updated.splice(index, 1);
+      return [item, ...updated];
+    });
+  };
 
   const handleSave = async () => {
     const isNew = !editing;
@@ -282,20 +313,25 @@ const PropertiesTab = ({ showMessage }) => {
 
     setLoading(true);
     try {
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method, headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, amenities })
       });
       const d = await res.json();
       if (d.success) {
-        showMessage('success', isNew ? 'Property created! You can now upload images below.' : 'Property updated!');
-        if (isNew) {
-          // Stay in edit mode so images can be uploaded immediately
-          setEditing(form.room_key);
-          setShowAddForm(false);
-        } else {
-          setEditing(null); setForm({}); setShowAddForm(false);
+        if (isNew && pendingImages.length > 0) {
+          const createdKey = form.room_key.toLowerCase().replace(/\s+/g, '_');
+          for (let i = 0; i < pendingImages.length; i++) {
+            setUploadProgress(`Uploading image ${i + 1} of ${pendingImages.length}...`);
+            const fd = new FormData();
+            fd.append('image', pendingImages[i]);
+            await authFetch(`${API_URL}/admin/properties/${createdKey}/images`, { method: 'POST', body: fd });
+          }
+          setUploadProgress('');
+          setPendingImages([]);
         }
+        showMessage('success', isNew ? 'Property created with images!' : 'Property updated!');
+        setEditing(null); setForm({}); setShowAddForm(false);
         fetch_();
       } else showMessage('error', d.message);
     } catch { showMessage('error', 'Save failed'); }
@@ -305,7 +341,7 @@ const PropertiesTab = ({ showMessage }) => {
   const handleDeactivate = async (key) => {
     if (!window.confirm('Deactivate this listing?')) return;
     try {
-      const res = await fetch(`${API_URL}/admin/properties/${key}`, { method: 'DELETE' });
+      const res = await authFetch(`${API_URL}/admin/properties/${key}`, { method: 'DELETE' });
       const d = await res.json();
       if (d.success) { showMessage('success', 'Deactivated'); fetch_(); }
       else showMessage('error', d.message);
@@ -318,7 +354,7 @@ const PropertiesTab = ({ showMessage }) => {
     try {
       const fd = new FormData();
       fd.append('image', imageFile);
-      const res = await fetch(`${API_URL}/admin/properties/${room_key}/images`, { method: 'POST', body: fd });
+      const res = await authFetch(`${API_URL}/admin/properties/${room_key}/images`, { method: 'POST', body: fd });
       const d = await res.json();
       if (d.success) { showMessage('success', 'Image uploaded!'); setImageFile(null); fetch_(); }
       else showMessage('error', d.message);
@@ -329,7 +365,7 @@ const PropertiesTab = ({ showMessage }) => {
   const handleRemoveImage = async (room_key, url) => {
     if (!window.confirm('Remove this image?')) return;
     try {
-      const res = await fetch(`${API_URL}/admin/properties/${room_key}/images`, {
+      const res = await authFetch(`${API_URL}/admin/properties/${room_key}/images`, {
         method: 'DELETE', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_url: url })
       });
@@ -378,6 +414,57 @@ const PropertiesTab = ({ showMessage }) => {
             <textarea value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} rows={3}
               className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500" />
           </div>
+
+          {/* ── Image Uploader ── */}
+          <div>
+            <label className="block text-purple-200 text-sm mb-1">Property Images</label>
+            <p className="text-purple-400 text-xs mb-3">
+              Select one or more images. The <span className="text-amber-400 font-semibold">first image</span> is the main cover photo.
+              Hover any image and click <span className="text-amber-400 font-semibold">Set as Main</span> to change the order.
+            </p>
+
+            {pendingImages.length > 0 && (
+              <div className="flex flex-wrap gap-3 mb-4">
+                {pendingImages.map((file, i) => (
+                  <div key={i} className="relative group w-24 h-24 shrink-0">
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt={`preview-${i}`}
+                      className={`w-24 h-24 object-cover rounded-xl border-2 transition ${i === 0 ? 'border-amber-400' : 'border-white/20'}`}
+                    />
+                    {i === 0 && (
+                      <span className="absolute top-1 left-1 bg-amber-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                        Main
+                      </span>
+                    )}
+                    <div className="absolute inset-0 rounded-xl bg-black/50 flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {i !== 0 && (
+                        <button type="button" onClick={() => setPendingAsMain(i)}
+                          className="bg-amber-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full w-fit">
+                          Set as Main
+                        </button>
+                      )}
+                      <button type="button" onClick={() => removePendingImage(i)}
+                        className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full w-fit">
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <label className="inline-flex items-center gap-2 cursor-pointer px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-purple-200 text-sm transition">
+              <FiUpload size={14} />
+              {pendingImages.length === 0 ? 'Select Images' : `Add More (${pendingImages.length} selected)`}
+              <input type="file" accept="image/*" multiple className="sr-only" onChange={handlePendingImageSelect} />
+            </label>
+
+            {uploadProgress && (
+              <p className="mt-3 text-amber-300 text-sm font-medium">{uploadProgress}</p>
+            )}
+          </div>
+
           <div>
             <label className="block text-purple-200 text-sm mb-2">Amenities — tick all that apply</label>
             <AmenitiesPicker selected={form.amenities || []} onChange={v => setForm({ ...form, amenities: v })} />
@@ -385,7 +472,7 @@ const PropertiesTab = ({ showMessage }) => {
           <div className="flex gap-3">
             <button onClick={handleSave} disabled={loading}
               className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all flex items-center gap-2 disabled:opacity-50">
-              <FiSave /> {editing ? 'Save Changes' : 'Create Property'}
+              <FiSave /> {uploadProgress ? uploadProgress : editing ? 'Save Changes' : 'Create Property'}
             </button>
             <button onClick={() => { cancelEdit(); setShowAddForm(false); }}
               className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all">
@@ -464,7 +551,7 @@ const DiscountsTab = ({ showMessage }) => {
   const fetch_ = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/admin/discounts`);
+      const res = await authFetch(`${API_URL}/admin/discounts`);
       const d = await res.json();
       if (d.success) setDiscounts(d.discounts || []);
     } catch { showMessage('error', 'Failed to load'); }
@@ -477,7 +564,7 @@ const DiscountsTab = ({ showMessage }) => {
     if (!form.code || !form.value) { showMessage('error', 'Code and value are required'); return; }
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/admin/discounts`, {
+      const res = await authFetch(`${API_URL}/admin/discounts`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
@@ -498,7 +585,7 @@ const DiscountsTab = ({ showMessage }) => {
 
   const handleToggle = async (id, is_active) => {
     try {
-      const res = await fetch(`${API_URL}/admin/discounts/${id}`, {
+      const res = await authFetch(`${API_URL}/admin/discounts/${id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: !is_active })
       });
@@ -510,7 +597,7 @@ const DiscountsTab = ({ showMessage }) => {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this code?')) return;
     try {
-      const res = await fetch(`${API_URL}/admin/discounts/${id}`, { method: 'DELETE' });
+      const res = await authFetch(`${API_URL}/admin/discounts/${id}`, { method: 'DELETE' });
       const d = await res.json();
       if (d.success) { showMessage('success', 'Deleted'); fetch_(); } else showMessage('error', d.message);
     } catch { showMessage('error', 'Failed'); }
@@ -622,7 +709,7 @@ const ContentTab = ({ showMessage }) => {
   const handleSave = async (key, value) => {
     setSaving(true);
     try {
-      const res = await fetch(`${API_URL}/admin/content/${key}`, {
+      const res = await authFetch(`${API_URL}/admin/content/${key}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ value })
       });
@@ -758,10 +845,11 @@ const ContentTab = ({ showMessage }) => {
 };
 
 // ─── Main Hero / Dashboard ────────────────────────────────────────
-const Hero = () => {
+const Hero = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState('bookings');
   const [message, setMessage] = useState({ type: '', text: '' });
   const [stats, setStats] = useState({ total: 0, confirmed: 0, pending: 0 });
+  const adminName = sessionStorage.getItem('admin_name') || 'Admin';
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
@@ -771,7 +859,7 @@ const Hero = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/admin/bookings`);
+        const res = await authFetch(`${API_URL}/admin/bookings`);
         const d = await res.json();
         if (d.success) {
           const all = d.bookings.all || [];
@@ -799,8 +887,17 @@ const Hero = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6 border border-white/20">
-          <h1 className="text-3xl font-bold text-white mb-2">BookAStay Admin</h1>
-          <p className="text-purple-200">Manage bookings, properties, discounts, and content</p>
+          <div className="flex justify-between items-start gap-4 flex-wrap mb-2">
+            <div>
+              <h1 className="text-3xl font-bold text-white">BookAStay Admin</h1>
+              <p className="text-purple-200 mt-1">Logged in as <span className="text-white font-semibold">{adminName}</span></p>
+            </div>
+            <button onClick={onLogout}
+              className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-red-500/30 border border-white/20 hover:border-red-500/40 text-purple-200 hover:text-red-300 rounded-xl transition text-sm font-medium">
+              <FiX size={16} /> Sign Out
+            </button>
+          </div>
+          <p className="text-purple-300 text-sm">Manage bookings, properties, discounts, and content</p>
           <div className="grid grid-cols-3 gap-4 mt-4">
             {[
               { label: 'Total Bookings', value: stats.total, color: 'text-blue-300' },
