@@ -5,7 +5,8 @@ import {
   FiTag, FiImage, FiFileText, FiDollarSign, FiToggleLeft, FiToggleRight,
   FiSave, FiUpload, FiX,
   FiWifi, FiWind, FiMonitor, FiZap, FiShield, FiActivity,
-  FiBriefcase, FiSun, FiDroplet, FiCoffee, FiMapPin, FiAnchor, FiSliders
+  FiBriefcase, FiSun, FiDroplet, FiCoffee, FiMapPin, FiAnchor, FiSliders, FiBookOpen,
+  FiLock, FiCamera, FiThermometer, FiUmbrella, FiTruck, FiHeart, FiPrinter, FiFilm, FiTv
 } from 'react-icons/fi';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:4000') + '/api';
@@ -21,40 +22,77 @@ const authFetch = (url, opts = {}) => {
   });
 };
 
-const AMENITY_OPTIONS = [
-  { name: 'High-Speed WiFi',          Icon: FiWifi },
-  { name: 'Full Kitchen',             Icon: FiCoffee },
-  { name: 'Shared Kitchen',           Icon: FiCoffee },
-  { name: 'Air Conditioning',         Icon: FiWind },
-  { name: 'Smart TV',                 Icon: FiMonitor },
-  { name: 'DSTV / Cable TV',          Icon: FiMonitor },
-  { name: 'Free Parking',             Icon: FiMapPin },
-  { name: 'Private Balcony',          Icon: FiSun },
-  { name: 'Private Bathroom',         Icon: FiDroplet },
-  { name: 'Washing Machine',          Icon: FiRefreshCw },
-  { name: 'Generator / Backup Power', Icon: FiZap },
-  { name: 'Security / Gated',         Icon: FiShield },
-  { name: 'Swimming Pool',            Icon: FiAnchor },
-  { name: 'Gym / Fitness',            Icon: FiActivity },
-  { name: 'Work Desk',                Icon: FiBriefcase },
-  { name: 'Iron & Board',             Icon: FiSliders },
+// Facilities — mirrors the public /facilities page (Frontend Feauters.jsx). Keep the two in sync.
+const AMENITY_CATEGORIES = [
+  {
+    category: 'Entertainment & Connectivity',
+    items: [
+      { name: 'Unlimited Internet', Icon: FiWifi },
+      { name: 'Smart TV', Icon: FiTv },
+      { name: 'Board Games Collection', Icon: FiFilm },
+    ],
+  },
+  {
+    category: 'Kitchen & Dining',
+    items: [
+      { name: 'Fully-Kitted Kitchen', Icon: FiCoffee },
+      { name: 'Complimentary Beverages', Icon: FiCoffee },
+    ],
+  },
+  {
+    category: 'Comfort & Convenience',
+    items: [
+      { name: 'Air Conditioners', Icon: FiWind },
+      { name: 'Rechargeable Fans', Icon: FiWind },
+      { name: 'Washing Machine', Icon: FiRefreshCw },
+      { name: 'Water Heater', Icon: FiThermometer },
+      { name: 'Hair Dryers', Icon: FiWind },
+      { name: 'Hotel-Grade Beddings', Icon: FiHome },
+      { name: 'Bathroom Essentials', Icon: FiDroplet },
+      { name: 'Smart Home Features', Icon: FiHome },
+    ],
+  },
+  {
+    category: 'Work & Productivity',
+    items: [
+      { name: 'Dedicated Workspace', Icon: FiBriefcase },
+      { name: 'Constant Electricity', Icon: FiZap },
+    ],
+  },
+  {
+    category: 'Security & Safety',
+    items: [
+      { name: 'Maximum Security', Icon: FiShield },
+      { name: 'Self Check-in', Icon: FiLock },
+      { name: 'Fire Extinguisher', Icon: FiShield },
+      { name: 'First Aid Box', Icon: FiHeart },
+      { name: 'Spacious Parking', Icon: FiTruck },
+    ],
+  },
 ];
 
 const AmenitiesPicker = ({ selected = [], onChange }) => {
   const toggle = (name) =>
     onChange(selected.includes(name) ? selected.filter(a => a !== name) : [...selected, name]);
   return (
-    <div className="grid grid-cols-2 gap-2">
-      {AMENITY_OPTIONS.map(({ name, Icon }) => (
-        <label key={name}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition select-none
-            ${selected.includes(name)
-              ? 'bg-purple-600/40 border-purple-400 text-white'
-              : 'bg-white/5 border-white/20 text-purple-200 hover:border-white/40'}`}>
-          <input type="checkbox" checked={selected.includes(name)} onChange={() => toggle(name)} className="sr-only" />
-          <Icon size={14} className="shrink-0" />
-          <span className="text-xs font-medium">{name}</span>
-        </label>
+    <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+      {AMENITY_CATEGORIES.map(({ category, items }) => (
+        <div key={category}>
+          <h4 className="text-purple-300 text-xs font-semibold uppercase tracking-wider mb-2">{category}</h4>
+          <div className="grid grid-cols-2 gap-2">
+            {items.map(({ name, Icon }) => (
+              <label key={name}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition select-none
+                  ${selected.includes(name)
+                    ? 'bg-purple-600/40 border-purple-400 text-white'
+                    : 'bg-white/5 border-white/20 text-purple-200 hover:border-white/40'}`}>
+                <input type="checkbox" checked={selected.includes(name)} onChange={() => toggle(name)} className="sr-only" />
+                <Icon size={14} className="shrink-0" />
+                <span className="text-xs font-medium">{name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
       ))}
     </div>
   );
@@ -260,6 +298,13 @@ const PropertiesTab = ({ showMessage }) => {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
   const [showAddForm, setShowAddForm] = useState(false);
+  // ── Guided apartment/room setup (drives property_group + blocks_group) ──
+  const [aptChoice, setAptChoice] = useState('__standalone__'); // '__standalone__' | '__new__' | <group key>
+  const [newAptName, setNewAptName] = useState('');
+  const [listingType, setListingType] = useState('entire');     // 'entire' | 'room'
+  const [roomNo, setRoomNo] = useState('1');
+  const slug = (s) => (s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const resetSetup = () => { setAptChoice('__standalone__'); setNewAptName(''); setListingType('entire'); setRoomNo('1'); };
   const [imageFile, setImageFile] = useState(null);
   const [uploadingImage, setUploadingImage] = useState('');
   const [pendingImages, setPendingImages] = useState([]);
@@ -281,10 +326,19 @@ const PropertiesTab = ({ showMessage }) => {
     setEditing(p.room_key);
     const amenityNames = (p.amenities || []).map(a => typeof a === 'string' ? a : a.name);
     setForm({ ...p, amenities: amenityNames });
+    if (!p.property_group) {
+      setAptChoice('__standalone__'); setListingType('entire'); setRoomNo('1');
+    } else {
+      setAptChoice(p.property_group);
+      setListingType(p.blocks_group ? 'entire' : 'room');
+      const m = (p.room_key || '').match(/_room_(\d+)$/);
+      setRoomNo(m ? m[1] : '1');
+    }
+    setNewAptName('');
     setShowAddForm(false);
   };
 
-  const cancelEdit = () => { setEditing(null); setForm({}); setPendingImages([]); setUploadProgress(''); };
+  const cancelEdit = () => { setEditing(null); setForm({}); setPendingImages([]); setUploadProgress(''); resetSetup(); };
 
   const handlePendingImageSelect = (e) => {
     const files = Array.from(e.target.files);
@@ -311,11 +365,32 @@ const PropertiesTab = ({ showMessage }) => {
 
     const amenities = (form.amenities || []).map(name => ({ name }));
 
+    // Availability grouping — derive from the guided setup so bookings can't mix
+    const standalone = aptChoice === '__standalone__';
+    const gKey = standalone ? '' : (aptChoice === '__new__' ? slug(newAptName) : aptChoice);
+    if (!standalone && !gKey) {
+      showMessage('error', 'Please name the apartment (or choose “Standalone”).');
+      return;
+    }
+    const grouping = standalone
+      ? { property_group: null, blocks_group: false }
+      : { property_group: gKey, blocks_group: listingType === 'entire' };
+
+    // Don't let an apartment hold more rooms than its entire listing declares
+    if (!standalone && listingType === 'room') {
+      const entire = (properties || []).find(p => p.property_group === gKey && p.blocks_group);
+      const existingRooms = (properties || []).filter(p => p.property_group === gKey && !p.blocks_group && p.room_key !== form.room_key);
+      if (entire && Number(entire.bedrooms) > 0 && existingRooms.length >= Number(entire.bedrooms)) {
+        showMessage('error', `"${gKey}" already has all ${entire.bedrooms} room(s). Raise the apartment's room count to add more.`);
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const res = await authFetch(url, {
         method, headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, amenities })
+        body: JSON.stringify({ ...form, ...grouping, amenities })
       });
       const d = await res.json();
       if (d.success) {
@@ -331,7 +406,7 @@ const PropertiesTab = ({ showMessage }) => {
           setPendingImages([]);
         }
         showMessage('success', isNew ? 'Property created with images!' : 'Property updated!');
-        setEditing(null); setForm({}); setShowAddForm(false);
+        setEditing(null); setForm({}); setShowAddForm(false); resetSetup();
         fetch_();
       } else showMessage('error', d.message);
     } catch { showMessage('error', 'Save failed'); }
@@ -339,12 +414,36 @@ const PropertiesTab = ({ showMessage }) => {
   };
 
   const handleDeactivate = async (key) => {
-    if (!window.confirm('Deactivate this listing?')) return;
+    if (!window.confirm('Turn this listing OFF? It stays in your list but is hidden from the website.')) return;
     try {
       const res = await authFetch(`${API_URL}/admin/properties/${key}`, { method: 'DELETE' });
       const d = await res.json();
-      if (d.success) { showMessage('success', 'Deactivated'); fetch_(); }
+      if (d.success) { showMessage('success', 'Listing turned off'); fetch_(); }
       else showMessage('error', d.message);
+    } catch { showMessage('error', 'Failed'); }
+  };
+
+  // ON/OFF toggle — turn a hidden listing back on (backend needs ≥1 image first)
+  const handleActivate = async (p) => {
+    try {
+      const res = await authFetch(`${API_URL}/admin/properties/${p.room_key}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: true }),
+      });
+      const d = await res.json();
+      if (d.success) { showMessage('success', 'Listing turned on'); fetch_(); }
+      else showMessage('error', d.message || 'Could not activate');
+    } catch { showMessage('error', 'Failed'); }
+  };
+
+  // Permanent hard delete — removes the row from the database (not reversible)
+  const handleHardDelete = async (p) => {
+    if (!window.confirm(`Permanently DELETE "${p.name}" from the database? This cannot be undone.`)) return;
+    try {
+      const res = await authFetch(`${API_URL}/admin/properties/${p.room_key}/permanent`, { method: 'DELETE' });
+      const d = await res.json();
+      if (d.success) { showMessage('success', 'Property permanently deleted'); fetch_(); }
+      else showMessage('error', d.message || 'Delete failed');
     } catch { showMessage('error', 'Failed'); }
   };
 
@@ -375,22 +474,59 @@ const PropertiesTab = ({ showMessage }) => {
   };
 
   const fields = [
-    { label: 'Room Key (e.g. room2)', field: 'room_key', disabled: !!editing },
+    { label: 'Room Key (unique id — auto-filled)', field: 'room_key', disabled: !!editing },
     { label: 'Display Name', field: 'name' },
     { label: 'Subtitle', field: 'subtitle' },
     { label: 'Category', field: 'category' },
     { label: 'Base Price (₦/night)', field: 'base_price', type: 'number' },
     { label: 'Max Guests', field: 'max_guests', type: 'number' },
     { label: 'Min Nights', field: 'min_nights', type: 'number' },
-    { label: 'Bedrooms', field: 'bedrooms', type: 'number' },
     { label: 'Bathrooms', field: 'bathrooms', type: 'number' },
     { label: 'Sort Order', field: 'sort_order', type: 'number' },
   ];
 
+  // ── Derived values for the guided setup UI ──
+  const apartments = [...new Set((properties || []).map(p => p.property_group).filter(Boolean))];
+  const isStandalone = aptChoice === '__standalone__';
+  const groupKey = isStandalone ? '' : (aptChoice === '__new__' ? slug(newAptName) : aptChoice);
+  const groupDisplay = isStandalone ? '' : (aptChoice === '__new__' ? (newAptName || 'Apartment') : aptChoice);
+  const entireListing = groupKey ? (properties || []).find(p => p.property_group === groupKey && p.blocks_group) : null;
+  const roomCount = entireListing ? (Number(entireListing.bedrooms) || 0) : 0;
+  const maxRooms = roomCount > 0 ? roomCount : 8;
+  const takenRoomKeys = new Set((properties || []).filter(p => p.property_group === groupKey).map(p => p.room_key));
+  const roomsInGroup = (properties || []).filter(p => p.property_group === groupKey && !p.blocks_group).length;
+  const apartmentFull = !!entireListing && roomCount > 0 && roomsInGroup >= roomCount && !editing;
+
+  // Keep property_group / blocks_group (and auto-fill the identity fields on a new listing) in sync with the setup choices
+  const syncSetup = (over = {}) => {
+    const choice = over.choice ?? aptChoice;
+    const type = over.type ?? listingType;
+    const room = over.room ?? roomNo;
+    const newName = over.newName ?? newAptName;
+    const standalone = choice === '__standalone__';
+    const gKey = standalone ? '' : (choice === '__new__' ? slug(newName) : choice);
+    const gDisp = standalone ? '' : (choice === '__new__' ? (newName || 'Apartment') : choice);
+    setForm(f => {
+      const next = { ...f, property_group: standalone ? '' : gKey, blocks_group: !standalone && type === 'entire' };
+      if (!editing && !standalone) {
+        if (type === 'entire') {
+          next.room_key = gKey ? `${gKey}_entire` : '';
+          next.name = `${gDisp} – Entire apartment`;
+          next.category = 'Entire Apartment';
+        } else {
+          next.room_key = gKey ? `${gKey}_room_${room}` : '';
+          next.name = `${gDisp} – Room ${room}`;
+          next.category = 'Private Room';
+        }
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-6">
       {!editing && !showAddForm && (
-        <button onClick={() => setShowAddForm(true)}
+        <button onClick={() => { setForm({}); resetSetup(); setShowAddForm(true); }}
           className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all">
           <FiPlus /> Add New Property
         </button>
@@ -399,6 +535,83 @@ const PropertiesTab = ({ showMessage }) => {
       {(editing || showAddForm) && (
         <div className="bg-white/5 border border-white/20 rounded-xl p-6 space-y-4">
           <h3 className="text-white font-bold text-lg">{editing ? 'Edit Property' : 'Add New Property'}</h3>
+
+          {/* ── STEP 1: Set up this listing (defines availability grouping) ── */}
+          <div className="bg-purple-500/10 border border-purple-400/30 rounded-lg p-4 space-y-3">
+            <p className="text-white font-semibold text-sm">1. Set up this listing</p>
+            <p className="text-purple-300 text-xs leading-relaxed">
+              Choose which apartment this belongs to and whether it's the <strong>whole place</strong> or a <strong>single room</strong>.
+              This is what keeps calendars from clashing — booking the whole apartment blocks its rooms, and booking a room blocks the whole-apartment listing.
+            </p>
+
+            <div>
+              <label className="block text-purple-200 text-sm mb-1">Apartment</label>
+              <select value={aptChoice}
+                onChange={e => { const v = e.target.value; setAptChoice(v); syncSetup({ choice: v }); }}
+                className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                <option value="__standalone__" className="bg-slate-800 text-white">Standalone — rented as one whole unit only</option>
+                {apartments.map(a => <option key={a} value={a} className="bg-slate-800 text-white">{a}</option>)}
+                <option value="__new__" className="bg-slate-800 text-white">➕ Add a new apartment…</option>
+              </select>
+            </div>
+
+            {aptChoice === '__new__' && (
+              <div>
+                <label className="block text-purple-200 text-sm mb-1">New apartment name <span className="text-amber-300">*</span></label>
+                <input type="text" value={newAptName}
+                  onChange={e => { const v = e.target.value; setNewAptName(v); syncSetup({ newName: v }); }}
+                  placeholder="e.g. Apartment 1"
+                  className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                {groupKey && <p className="text-purple-400 text-xs mt-1">Saved under id <code className="text-amber-300">{groupKey}</code></p>}
+              </div>
+            )}
+
+            {!isStandalone && (
+              <div>
+                <label className="block text-purple-200 text-sm mb-1">This listing is…</label>
+                <select value={listingType}
+                  onChange={e => { const v = e.target.value; setListingType(v); syncSetup({ type: v }); }}
+                  className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                  <option value="entire" className="bg-slate-800 text-white">The entire apartment (booking it blocks every room)</option>
+                  <option value="room" className="bg-slate-800 text-white">A single room in this apartment</option>
+                </select>
+              </div>
+            )}
+
+            {!isStandalone && listingType === 'entire' && (
+              <div>
+                <label className="block text-purple-200 text-sm mb-1">How many rooms does this apartment have?</label>
+                <input type="number" min="1" value={form.bedrooms || ''}
+                  onChange={e => setForm({ ...form, bedrooms: e.target.value })}
+                  placeholder="e.g. 3"
+                  className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                <p className="text-purple-400 text-xs mt-1">Sets how many rooms (Room 1…Room N) you can add for this apartment later.</p>
+              </div>
+            )}
+
+            {!isStandalone && listingType === 'room' && (
+              <div>
+                <label className="block text-purple-200 text-sm mb-1">Which room?</label>
+                <select value={roomNo}
+                  onChange={e => { const v = e.target.value; setRoomNo(v); syncSetup({ room: v }); }}
+                  className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                  {Array.from({ length: maxRooms }, (_, i) => String(i + 1)).map(n => {
+                    const rk = `${groupKey}_room_${n}`;
+                    const taken = takenRoomKeys.has(rk) && !(editing && form.room_key === rk);
+                    return <option key={n} value={n} disabled={taken} className="bg-slate-800 text-white">Room {n}{taken ? ' — already added' : ''}</option>;
+                  })}
+                </select>
+                {apartmentFull
+                  ? <p className="text-red-300 text-xs mt-1">All {roomCount} rooms have already been added for this apartment. Raise the apartment's room count (edit the entire listing) to add more.</p>
+                  : entireListing
+                    ? <p className="text-purple-400 text-xs mt-1">"{entireListing.name}" has {roomCount} room(s).</p>
+                    : <p className="text-amber-300 text-xs mt-1">Tip: add the entire apartment first so the room count is known.</p>}
+              </div>
+            )}
+          </div>
+
+          {/* ── STEP 2: Details & pricing ── */}
+          <p className="text-white font-semibold text-sm pt-1">2. Details &amp; pricing</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {fields.map(({ label, field, type, disabled }) => (
               <div key={field}>
@@ -408,6 +621,14 @@ const PropertiesTab = ({ showMessage }) => {
                   className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-purple-500" />
               </div>
             ))}
+            {(isStandalone || listingType === 'room') && (
+              <div>
+                <label className="block text-purple-200 text-sm mb-1">{isStandalone ? 'Bedrooms' : 'Bedrooms in this room'}</label>
+                <input type="number" min="0" value={form.bedrooms || ''}
+                  onChange={e => setForm({ ...form, bedrooms: e.target.value })}
+                  className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-purple-200 text-sm mb-1">Description</label>
@@ -501,11 +722,18 @@ const PropertiesTab = ({ showMessage }) => {
                 <span>Min: {p.min_nights} night(s)</span>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               {editing !== p.room_key && (
                 <>
-                  <button onClick={() => startEdit(p)} className="p-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg"><FiEdit2 /></button>
-                  {p.is_active && <button onClick={() => handleDeactivate(p.room_key)} className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg"><FiTrash2 /></button>}
+                  <button
+                    onClick={() => (p.is_active ? handleDeactivate(p.room_key) : handleActivate(p))}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${p.is_active ? 'bg-green-500/20 hover:bg-green-500/30 text-green-300' : 'bg-white/10 hover:bg-white/20 text-purple-200'}`}
+                    title={p.is_active ? 'Turn OFF (hide from website)' : 'Turn ON (show on website)'}>
+                    {p.is_active ? <FiToggleRight size={18} /> : <FiToggleLeft size={18} />}
+                    {p.is_active ? 'On' : 'Off'}
+                  </button>
+                  <button onClick={() => startEdit(p)} className="p-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg" title="Edit"><FiEdit2 /></button>
+                  <button onClick={() => handleHardDelete(p)} className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg" title="Delete permanently"><FiTrash2 /></button>
                 </>
               )}
             </div>
@@ -542,11 +770,18 @@ const PropertiesTab = ({ showMessage }) => {
 };
 
 // ─── TAB: Discount Codes ──────────────────────────────────────────
+const EMPTY_DISCOUNT_FORM = {
+  code: '', type: 'percentage', value: '', description: '', expiry_date: '', usage_limit: '',
+  min_nights: '', min_amount: '', applies_to: [],
+};
+
 const DiscountsTab = ({ showMessage }) => {
   const [discounts, setDiscounts] = useState([]);
+  const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ code: '', type: 'percentage', value: '', description: '', expiry_date: '', usage_limit: '' });
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(EMPTY_DISCOUNT_FORM);
 
   const fetch_ = async () => {
     setLoading(true);
@@ -558,25 +793,56 @@ const DiscountsTab = ({ showMessage }) => {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetch_(); }, []);
+  const fetchRooms = async () => {
+    try {
+      const res = await fetch(`${API_URL}/properties`);
+      const d = await res.json();
+      if (d.success) setRooms(d.properties || []);
+    } catch { /* non-fatal — Applies To just won't have options */ }
+  };
 
-  const handleCreate = async () => {
+  useEffect(() => { fetch_(); fetchRooms(); }, []);
+
+  const startEdit = (d) => {
+    setEditingId(d.id);
+    setForm({
+      code: d.code, type: d.type, value: d.value, description: d.description || '',
+      expiry_date: d.expiry_date || '', usage_limit: d.usage_limit ?? '',
+      min_nights: d.min_nights ?? '', min_amount: d.min_amount ?? '', applies_to: d.applies_to || [],
+    });
+    setShowForm(true);
+  };
+
+  const cancelForm = () => { setShowForm(false); setEditingId(null); setForm(EMPTY_DISCOUNT_FORM); };
+
+  const toggleRoom = (room_key) => {
+    setForm(f => ({
+      ...f,
+      applies_to: f.applies_to.includes(room_key) ? f.applies_to.filter(r => r !== room_key) : [...f.applies_to, room_key],
+    }));
+  };
+
+  const handleSave = async () => {
     if (!form.code || !form.value) { showMessage('error', 'Code and value are required'); return; }
     setLoading(true);
     try {
-      const res = await authFetch(`${API_URL}/admin/discounts`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const url = editingId ? `${API_URL}/admin/discounts/${editingId}` : `${API_URL}/admin/discounts`;
+      const method = editingId ? 'PUT' : 'POST';
+      const res = await authFetch(url, {
+        method, headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
           value: Number(form.value),
           usage_limit: form.usage_limit ? Number(form.usage_limit) : null,
+          min_nights: form.min_nights ? Number(form.min_nights) : 1,
+          min_amount: form.min_amount ? Number(form.min_amount) : 0,
+          applies_to: form.applies_to.length ? form.applies_to : null,
         })
       });
       const d = await res.json();
       if (d.success) {
-        showMessage('success', 'Discount code created!');
-        setShowForm(false);
-        setForm({ code: '', type: 'percentage', value: '', description: '', expiry_date: '', usage_limit: '' });
+        showMessage('success', editingId ? 'Discount code updated!' : 'Discount code created!');
+        cancelForm();
         fetch_();
       } else showMessage('error', d.message);
     } catch { showMessage('error', 'Failed'); }
@@ -605,20 +871,22 @@ const DiscountsTab = ({ showMessage }) => {
 
   return (
     <div className="space-y-6">
-      <button onClick={() => setShowForm(!showForm)}
+      <button onClick={() => (showForm ? cancelForm() : setShowForm(true))}
         className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg">
         <FiPlus /> {showForm ? 'Cancel' : 'New Discount Code'}
       </button>
 
       {showForm && (
         <div className="bg-white/5 border border-white/20 rounded-xl p-6 space-y-4">
-          <h3 className="text-white font-bold">Create Discount Code</h3>
+          <h3 className="text-white font-bold">{editingId ? 'Edit Discount Code' : 'Create Discount Code'}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
               { label: 'Code (e.g. WELCOME20)', field: 'code', placeholder: 'SUMMER10' },
               { label: 'Description', field: 'description', placeholder: 'Summer promo' },
               { label: 'Expiry Date', field: 'expiry_date', type: 'date' },
               { label: 'Usage Limit (blank = unlimited)', field: 'usage_limit', type: 'number', placeholder: '100' },
+              { label: 'Min Nights (e.g. 7 for a week+)', field: 'min_nights', type: 'number', placeholder: '1' },
+              { label: 'Min Booking Amount (₦, blank = none)', field: 'min_amount', type: 'number', placeholder: '0' },
             ].map(({ label, field, type, placeholder }) => (
               <div key={field}>
                 <label className="block text-purple-200 text-sm mb-1">{label}</label>
@@ -642,9 +910,26 @@ const DiscountsTab = ({ showMessage }) => {
                 className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500" />
             </div>
           </div>
-          <button onClick={handleCreate} disabled={loading}
+          <div>
+            <label className="block text-purple-200 text-sm mb-2">Applies To — leave blank for all rooms</label>
+            <div className="flex flex-wrap gap-2">
+              {rooms.map(r => (
+                <label key={r.room_key}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm select-none
+                    ${form.applies_to.includes(r.room_key)
+                      ? 'bg-purple-600/40 border-purple-400 text-white'
+                      : 'bg-white/5 border-white/20 text-purple-200 hover:border-white/40'}`}>
+                  <input type="checkbox" checked={form.applies_to.includes(r.room_key)}
+                    onChange={() => toggleRoom(r.room_key)} className="sr-only" />
+                  {r.name}
+                </label>
+              ))}
+              {rooms.length === 0 && <span className="text-purple-400 text-sm">No active rooms found</span>}
+            </div>
+          </div>
+          <button onClick={handleSave} disabled={loading}
             className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
-            {loading ? 'Creating...' : 'Create Code'}
+            {loading ? 'Saving...' : (editingId ? 'Save Changes' : 'Create Code')}
           </button>
         </div>
       )}
@@ -665,10 +950,15 @@ const DiscountsTab = ({ showMessage }) => {
                 </div>
                 <div className="text-purple-300 text-sm flex gap-4 flex-wrap">
                   <span>Used: {d.times_used}/{d.usage_limit ?? '∞'}</span>
+                  <span>Min: {d.min_nights || 1} night(s){d.min_amount > 0 ? `, ₦${Number(d.min_amount).toLocaleString()}+` : ''}</span>
+                  <span>{d.applies_to?.length ? `Applies to: ${d.applies_to.join(', ')}` : 'All rooms'}</span>
                   {d.expiry_date && <span>Expires: {new Date(d.expiry_date).toLocaleDateString()}</span>}
                   <span className={d.is_active ? 'text-green-300' : 'text-red-300'}>{d.is_active ? 'Active' : 'Inactive'}</span>
                 </div>
                 <div className="flex gap-2">
+                  <button onClick={() => startEdit(d)} className="p-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg">
+                    <FiEdit2 />
+                  </button>
                   <button onClick={() => handleToggle(d.id, d.is_active)}
                     className="p-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg text-sm">
                     {d.is_active ? <FiToggleRight /> : <FiToggleLeft />}
@@ -816,9 +1106,129 @@ const ContentTab = ({ showMessage }) => {
     );
   };
 
+  // House Rules editor
+  const HouseRulesEditor = () => {
+    const current = content.house_rules?.value || { rules: [] };
+    const [rules, setRules] = useState(current.rules || []);
+
+    const updateRule = (i, field, val) => {
+      const updated = [...rules];
+      updated[i] = { ...updated[i], [field]: val };
+      setRules(updated);
+    };
+
+    const addRule = () => setRules([...rules, { title: '', category: '', content: '', extra: '', details: [] }]);
+    const removeRule = (i) => setRules(rules.filter((_, j) => j !== i));
+
+    const addDetail = (ruleI) => {
+      const updated = [...rules];
+      updated[ruleI].details = [...(updated[ruleI].details || []), { subtitle: '', text: '', extra: '', list: [] }];
+      setRules(updated);
+    };
+    const updateDetail = (ruleI, detI, field, val) => {
+      const updated = [...rules];
+      updated[ruleI].details[detI] = { ...updated[ruleI].details[detI], [field]: val };
+      setRules(updated);
+    };
+    const removeDetail = (ruleI, detI) => {
+      const updated = [...rules];
+      updated[ruleI].details = updated[ruleI].details.filter((_, j) => j !== detI);
+      setRules(updated);
+    };
+
+    const addListItem = (ruleI, detI) => {
+      const updated = [...rules];
+      updated[ruleI].details[detI].list = [...(updated[ruleI].details[detI].list || []), ''];
+      setRules(updated);
+    };
+    const updateListItem = (ruleI, detI, itemI, val) => {
+      const updated = [...rules];
+      updated[ruleI].details[detI].list[itemI] = val;
+      setRules(updated);
+    };
+    const removeListItem = (ruleI, detI, itemI) => {
+      const updated = [...rules];
+      updated[ruleI].details[detI].list = updated[ruleI].details[detI].list.filter((_, j) => j !== itemI);
+      setRules(updated);
+    };
+
+    return (
+      <div className="space-y-6">
+        <h3 className="text-white font-bold">House Rules</h3>
+        <p className="text-purple-300 text-sm">Each rule is shown as a card on the House Rules page. "Details" are optional expandable sub-sections (e.g. for longer rules like power supply).</p>
+        {rules.map((rule, i) => (
+          <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/20 space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-purple-300 text-sm font-semibold">Rule {i + 1}</span>
+              <button onClick={() => removeRule(i)} className="text-red-400 text-xs hover:text-red-300">Remove Rule</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <input value={rule.title || ''} onChange={e => updateRule(i, 'title', e.target.value)}
+                placeholder="Title (e.g. Smoking)"
+                className="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none" />
+              <input value={rule.category || ''} onChange={e => updateRule(i, 'category', e.target.value)}
+                placeholder="Category (e.g. Health & Safety)"
+                className="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none" />
+            </div>
+            <textarea value={rule.content || ''} onChange={e => updateRule(i, 'content', e.target.value)} rows={3}
+              placeholder="Main rule text"
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+            <textarea value={rule.extra || ''} onChange={e => updateRule(i, 'extra', e.target.value)} rows={2}
+              placeholder="Extra text (optional)"
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+
+            <div className="pl-4 border-l-2 border-amber-500/20 space-y-3">
+              <span className="text-purple-300 text-xs font-semibold uppercase">Expandable Details (optional)</span>
+              {(rule.details || []).map((det, di) => (
+                <div key={di} className="bg-slate-700/30 rounded-lg p-3 space-y-2">
+                  <div className="flex justify-between items-center gap-2">
+                    <input value={det.subtitle || ''} onChange={e => updateDetail(i, di, 'subtitle', e.target.value)}
+                      placeholder="Subtitle (optional)"
+                      className="flex-1 px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-xs focus:outline-none" />
+                    <button onClick={() => removeDetail(i, di)} className="text-red-400 hover:text-red-300"><FiX size={14} /></button>
+                  </div>
+                  <textarea value={det.text || ''} onChange={e => updateDetail(i, di, 'text', e.target.value)} rows={2}
+                    placeholder="Text"
+                    className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs focus:outline-none" />
+                  <textarea value={det.extra || ''} onChange={e => updateDetail(i, di, 'extra', e.target.value)} rows={2}
+                    placeholder="Extra text (optional)"
+                    className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs focus:outline-none" />
+                  <div className="space-y-1">
+                    {(det.list || []).map((item, li) => (
+                      <div key={li} className="flex items-center gap-2">
+                        <input value={item} onChange={e => updateListItem(i, di, li, e.target.value)}
+                          placeholder="List item"
+                          className="flex-1 px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs focus:outline-none" />
+                        <button onClick={() => removeListItem(i, di, li)} className="text-red-400 hover:text-red-300"><FiX size={12} /></button>
+                      </div>
+                    ))}
+                    <button onClick={() => addListItem(i, di)} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                      <FiPlus size={12} /> Add List Item
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => addDetail(i)} className="text-sm text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                <FiPlus size={14} /> Add Detail Block
+              </button>
+            </div>
+          </div>
+        ))}
+        <button onClick={addRule} className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm">
+          <FiPlus /> Add Rule
+        </button>
+        <button onClick={() => handleSave('house_rules', { rules })} disabled={saving}
+          className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
+          <FiSave /> {saving ? 'Saving...' : 'Save House Rules'}
+        </button>
+      </div>
+    );
+  };
+
   const sections = [
     { key: 'about', label: 'About Us' },
     { key: 'getting_around', label: 'Getting Around' },
+    { key: 'house_rules', label: 'House Rules' },
   ];
 
   return (
@@ -838,7 +1248,193 @@ const ContentTab = ({ showMessage }) => {
         <>
           {activeSection === 'about' && <AboutEditor />}
           {activeSection === 'getting_around' && <GettingAroundEditor />}
+          {activeSection === 'house_rules' && <HouseRulesEditor />}
         </>
+      )}
+    </div>
+  );
+};
+
+// ─── TAB: Blog ────────────────────────────────────────────────────
+const EMPTY_POST_FORM = { title: '', slug: '', category: '', author: '', excerpt: '', content: '', image: '', published: false, date: '' };
+
+const BlogTab = ({ showMessage }) => {
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(EMPTY_POST_FORM);
+  const [imageFile, setImageFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
+  const fetch_ = async () => {
+    setLoading(true);
+    try {
+      const res = await authFetch(`${API_URL}/admin/blog`);
+      const d = await res.json();
+      if (d.success) setPosts(d.posts || []);
+    } catch { showMessage('error', 'Failed to load posts'); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetch_(); }, []);
+
+  const startEdit = (p) => {
+    setEditingId(p.id);
+    setForm({
+      title: p.title, slug: p.slug, category: p.category || '', author: p.author || '',
+      excerpt: p.excerpt || '', content: p.content || '', image: p.image || '',
+      published: p.published, date: p.date || '',
+    });
+    setImageFile(null);
+    setShowForm(true);
+  };
+
+  const cancelForm = () => { setShowForm(false); setEditingId(null); setForm(EMPTY_POST_FORM); setImageFile(null); };
+
+  const uploadImageIfNeeded = async () => {
+    if (!imageFile) return form.image;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', imageFile);
+      const res = await authFetch(`${API_URL}/admin/blog/upload-image`, { method: 'POST', body: fd });
+      const d = await res.json();
+      if (d.success) return d.url;
+      showMessage('error', d.message || 'Image upload failed');
+      return form.image;
+    } catch { showMessage('error', 'Image upload failed'); return form.image; }
+    finally { setUploading(false); }
+  };
+
+  const handleSave = async () => {
+    if (!form.title) { showMessage('error', 'Title is required'); return; }
+    setLoading(true);
+    try {
+      const imageUrl = await uploadImageIfNeeded();
+      const url = editingId ? `${API_URL}/admin/blog/${editingId}` : `${API_URL}/admin/blog`;
+      const method = editingId ? 'PUT' : 'POST';
+      const res = await authFetch(url, {
+        method, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, image: imageUrl })
+      });
+      const d = await res.json();
+      if (d.success) {
+        showMessage('success', editingId ? 'Post updated!' : 'Post created!');
+        cancelForm();
+        fetch_();
+      } else showMessage('error', d.message);
+    } catch { showMessage('error', 'Save failed'); }
+    finally { setLoading(false); }
+  };
+
+  const handleTogglePublish = async (p) => {
+    try {
+      const res = await authFetch(`${API_URL}/admin/blog/${p.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ published: !p.published })
+      });
+      const d = await res.json();
+      if (d.success) fetch_(); else showMessage('error', d.message);
+    } catch { showMessage('error', 'Failed'); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this post?')) return;
+    try {
+      const res = await authFetch(`${API_URL}/admin/blog/${id}`, { method: 'DELETE' });
+      const d = await res.json();
+      if (d.success) { showMessage('success', 'Deleted'); fetch_(); } else showMessage('error', d.message);
+    } catch { showMessage('error', 'Failed'); }
+  };
+
+  const fields = [
+    { label: 'Title', field: 'title', placeholder: 'How to Get Around Abeokuta' },
+    { label: 'Slug (auto from title if blank)', field: 'slug', placeholder: 'how-to-get-around-abeokuta' },
+    { label: 'Category', field: 'category', placeholder: 'Travel Tips' },
+    { label: 'Author', field: 'author', placeholder: 'BookAStay Team' },
+    { label: 'Date', field: 'date', type: 'date' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <button onClick={() => (showForm ? cancelForm() : setShowForm(true))}
+        className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg">
+        <FiPlus /> {showForm ? 'Cancel' : 'New Blog Post'}
+      </button>
+
+      {showForm && (
+        <div className="bg-white/5 border border-white/20 rounded-xl p-6 space-y-4">
+          <h3 className="text-white font-bold">{editingId ? 'Edit Post' : 'Create Post'}</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {fields.map(({ label, field, type, placeholder }) => (
+              <div key={field}>
+                <label className="block text-purple-200 text-sm mb-1">{label}</label>
+                <input type={type || 'text'} value={form[field] || ''} placeholder={placeholder || ''}
+                  onChange={e => setForm({ ...form, [field]: e.target.value })}
+                  className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+            ))}
+          </div>
+          <div>
+            <label className="block text-purple-200 text-sm mb-1">Excerpt (short summary shown on the blog list)</label>
+            <textarea value={form.excerpt || ''} onChange={e => setForm({ ...form, excerpt: e.target.value })} rows={2}
+              className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500" />
+          </div>
+          <div>
+            <label className="block text-purple-200 text-sm mb-1">Content</label>
+            <textarea value={form.content || ''} onChange={e => setForm({ ...form, content: e.target.value })} rows={8}
+              className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500" />
+          </div>
+          <div>
+            <label className="block text-purple-200 text-sm mb-1">Cover Image</label>
+            {form.image && <img src={form.image} alt="Cover" className="w-40 h-24 object-cover rounded-lg mb-2 border border-white/20" />}
+            <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files[0])}
+              className="text-purple-200 text-sm" />
+          </div>
+          <label className="flex items-center gap-2 text-purple-200 text-sm cursor-pointer">
+            <input type="checkbox" checked={form.published} onChange={e => setForm({ ...form, published: e.target.checked })} />
+            Published (visible on the site)
+          </label>
+          <button onClick={handleSave} disabled={loading || uploading}
+            className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
+            {uploading ? 'Uploading image...' : loading ? 'Saving...' : (editingId ? 'Save Changes' : 'Create Post')}
+          </button>
+        </div>
+      )}
+
+      {loading && !posts.length ? (
+        <div className="text-center text-purple-200">Loading...</div>
+      ) : (
+        <div className="space-y-3">
+          {posts.map(p => (
+            <div key={p.id} className={`bg-white/5 border rounded-xl p-4 ${p.published ? 'border-white/20' : 'border-white/10 opacity-60'}`}>
+              <div className="flex justify-between items-center flex-wrap gap-2">
+                <div>
+                  <span className="font-bold text-white">{p.title}</span>
+                  {p.category && <span className="ml-3 text-purple-400 text-sm">{p.category}</span>}
+                </div>
+                <div className="text-purple-300 text-sm flex gap-4 flex-wrap items-center">
+                  {p.date && <span>{new Date(p.date).toLocaleDateString()}</span>}
+                  <span className={p.published ? 'text-green-300' : 'text-red-300'}>{p.published ? 'Published' : 'Draft'}</span>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => startEdit(p)} className="p-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg">
+                    <FiEdit2 />
+                  </button>
+                  <button onClick={() => handleTogglePublish(p)}
+                    className="p-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg text-sm">
+                    {p.published ? <FiToggleRight /> : <FiToggleLeft />}
+                  </button>
+                  <button onClick={() => handleDelete(p.id)} className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg">
+                    <FiTrash2 />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {posts.length === 0 && <div className="text-center text-purple-300 py-8">No blog posts yet</div>}
+        </div>
       )}
     </div>
   );
@@ -880,6 +1476,7 @@ const Hero = ({ onLogout }) => {
     { key: 'properties', label: 'Properties', icon: FiHome },
     { key: 'discounts', label: 'Discount Codes', icon: FiTag },
     { key: 'content', label: 'Edit Content', icon: FiFileText },
+    { key: 'blog', label: 'Blog', icon: FiBookOpen },
   ];
 
   return (
@@ -935,6 +1532,7 @@ const Hero = ({ onLogout }) => {
             {activeTab === 'properties' && <PropertiesTab showMessage={showMessage} />}
             {activeTab === 'discounts' && <DiscountsTab showMessage={showMessage} />}
             {activeTab === 'content' && <ContentTab showMessage={showMessage} />}
+            {activeTab === 'blog' && <BlogTab showMessage={showMessage} />}
           </div>
         </div>
       </div>
