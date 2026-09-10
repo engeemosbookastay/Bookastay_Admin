@@ -336,6 +336,7 @@ const PropertiesTab = ({ showMessage }) => {
     }
     setNewAptName('');
     setShowAddForm(false);
+    setPendingImages([]); setUploadProgress(''); // don't carry staged images between edits
   };
 
   const cancelEdit = () => { setEditing(null); setForm({}); setPendingImages([]); setUploadProgress(''); resetSetup(); };
@@ -394,23 +395,25 @@ const PropertiesTab = ({ showMessage }) => {
       });
       const d = await res.json();
       if (d.success) {
-        if (isNew && pendingImages.length > 0) {
-          const createdKey = form.room_key.toLowerCase().replace(/\s+/g, '_');
+        if (pendingImages.length > 0) {
+          // Upload staged images for BOTH new and edited properties.
+          // Use the key the backend actually returned (room_key can't change on edit).
+          const targetKey = d.property?.room_key || (isNew ? form.room_key.toLowerCase().replace(/\s+/g, '_') : editing);
           let failed = '';
           for (let i = 0; i < pendingImages.length; i++) {
             setUploadProgress(`Uploading image ${i + 1} of ${pendingImages.length}...`);
             const fd = new FormData();
             fd.append('image', pendingImages[i]);
             try {
-              const upRes = await authFetch(`${API_URL}/admin/properties/${createdKey}/images`, { method: 'POST', body: fd });
+              const upRes = await authFetch(`${API_URL}/admin/properties/${targetKey}/images`, { method: 'POST', body: fd });
               const upData = await upRes.json();
               if (!upData.success) failed = upData.message || 'Image upload failed';
             } catch { failed = 'Could not reach the server to upload images'; }
           }
           setUploadProgress('');
           setPendingImages([]);
-          if (failed) showMessage('error', `Property created, but image upload failed: ${failed}`);
-          else showMessage('success', 'Property created with images!');
+          if (failed) showMessage('error', `Saved, but image upload failed: ${failed}`);
+          else showMessage('success', isNew ? 'Property created with images!' : 'Property updated — images added!');
         } else {
           showMessage('success', isNew ? 'Property created!' : 'Property updated!');
         }
@@ -475,14 +478,19 @@ const PropertiesTab = ({ showMessage }) => {
 
   const handleRemoveImage = async (room_key, url) => {
     if (!window.confirm('Remove this image?')) return;
+    // Optimistic: drop it from the UI immediately so it feels instant
+    setProperties(prev => prev.map(p =>
+      p.room_key === room_key ? { ...p, images: (p.images || []).filter(u => u !== url) } : p
+    ));
+    // Delete on the backend silently — only surface something if it fails
     try {
       const res = await authFetch(`${API_URL}/admin/properties/${room_key}/images`, {
         method: 'DELETE', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_url: url })
       });
       const d = await res.json();
-      if (d.success) { showMessage('success', 'Image removed'); fetch_(); }
-    } catch { showMessage('error', 'Failed to remove'); }
+      if (!d.success) { showMessage('error', d.message || 'Could not remove image'); fetch_(); }
+    } catch { showMessage('error', 'Could not remove image — restoring'); fetch_(); }
   };
 
   const fields = [
@@ -717,7 +725,8 @@ const PropertiesTab = ({ showMessage }) => {
 
       {loading && <div className="text-center text-purple-200">Loading...</div>}
 
-      {properties.map(p => (
+      {/* While editing one property, show only that property's card (hide the rest) */}
+      {properties.filter(p => !editing || p.room_key === editing).map(p => (
         <div key={p.room_key} className={`bg-white/5 border rounded-xl p-5 ${p.is_active ? 'border-white/20' : 'border-red-500/30 opacity-60'}`}>
           <div className="flex justify-between items-start mb-4">
             <div>
