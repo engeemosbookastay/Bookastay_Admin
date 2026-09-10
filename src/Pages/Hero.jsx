@@ -305,7 +305,7 @@ const PropertiesTab = ({ showMessage }) => {
   const [roomNo, setRoomNo] = useState('1');
   const slug = (s) => (s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   const resetSetup = () => { setAptChoice('__standalone__'); setNewAptName(''); setListingType('entire'); setRoomNo('1'); };
-  const [imageFile, setImageFile] = useState(null);
+  const [imageFile, setImageFile] = useState({}); // keyed by room_key — per-card, so one card's pick doesn't light up every card
   const [uploadingImage, setUploadingImage] = useState('');
   const [pendingImages, setPendingImages] = useState([]);
   const [uploadProgress, setUploadProgress] = useState('');
@@ -396,16 +396,24 @@ const PropertiesTab = ({ showMessage }) => {
       if (d.success) {
         if (isNew && pendingImages.length > 0) {
           const createdKey = form.room_key.toLowerCase().replace(/\s+/g, '_');
+          let failed = '';
           for (let i = 0; i < pendingImages.length; i++) {
             setUploadProgress(`Uploading image ${i + 1} of ${pendingImages.length}...`);
             const fd = new FormData();
             fd.append('image', pendingImages[i]);
-            await authFetch(`${API_URL}/admin/properties/${createdKey}/images`, { method: 'POST', body: fd });
+            try {
+              const upRes = await authFetch(`${API_URL}/admin/properties/${createdKey}/images`, { method: 'POST', body: fd });
+              const upData = await upRes.json();
+              if (!upData.success) failed = upData.message || 'Image upload failed';
+            } catch { failed = 'Could not reach the server to upload images'; }
           }
           setUploadProgress('');
           setPendingImages([]);
+          if (failed) showMessage('error', `Property created, but image upload failed: ${failed}`);
+          else showMessage('success', 'Property created with images!');
+        } else {
+          showMessage('success', isNew ? 'Property created!' : 'Property updated!');
         }
-        showMessage('success', isNew ? 'Property created with images!' : 'Property updated!');
         setEditing(null); setForm({}); setShowAddForm(false); resetSetup();
         fetch_();
       } else showMessage('error', d.message);
@@ -448,16 +456,20 @@ const PropertiesTab = ({ showMessage }) => {
   };
 
   const handleUploadImage = async (room_key) => {
-    if (!imageFile) return;
+    const file = imageFile[room_key];
+    if (!file) return;
     setUploadingImage(room_key);
     try {
       const fd = new FormData();
-      fd.append('image', imageFile);
+      fd.append('image', file);
       const res = await authFetch(`${API_URL}/admin/properties/${room_key}/images`, { method: 'POST', body: fd });
       const d = await res.json();
-      if (d.success) { showMessage('success', 'Image uploaded!'); setImageFile(null); fetch_(); }
-      else showMessage('error', d.message);
-    } catch { showMessage('error', 'Upload failed'); }
+      if (d.success) {
+        showMessage('success', 'Image uploaded!');
+        setImageFile(prev => { const next = { ...prev }; delete next[room_key]; return next; });
+        fetch_();
+      } else showMessage('error', d.message || 'Upload failed');
+    } catch { showMessage('error', 'Upload failed — could not reach the server'); }
     finally { setUploadingImage(''); }
   };
 
@@ -754,8 +766,8 @@ const PropertiesTab = ({ showMessage }) => {
               ))}
             </div>
             <div className="flex gap-2 items-center flex-wrap">
-              <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files[0])} className="text-sm text-purple-300" />
-              {imageFile && (
+              <input type="file" accept="image/*" onChange={e => { const f = e.target.files[0]; if (f) setImageFile(prev => ({ ...prev, [p.room_key]: f })); }} className="text-sm text-purple-300" />
+              {imageFile[p.room_key] && (
                 <button onClick={() => handleUploadImage(p.room_key)} disabled={uploadingImage === p.room_key}
                   className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm disabled:opacity-50">
                   <FiUpload size={14} /> {uploadingImage === p.room_key ? 'Uploading...' : 'Upload'}
@@ -1225,10 +1237,176 @@ const ContentTab = ({ showMessage }) => {
     );
   };
 
+  // Footer editor
+  const FooterEditor = () => {
+    const current = content.footer?.value || {};
+    const [phones, setPhones] = useState(current.phones || []);
+    const [email, setEmail] = useState(current.email || '');
+    const [address, setAddress] = useState(current.address || '');
+    const [socials, setSocials] = useState(current.socials || {});
+    const socialKeys = ['whatsapp', 'tiktok', 'facebook', 'instagram', 'twitter'];
+
+    return (
+      <div className="space-y-4">
+        <h3 className="text-white font-bold">Footer</h3>
+        <p className="text-purple-300 text-sm">Phone numbers, email, address and social links shown in the site footer. Leave a social link blank to hide its icon.</p>
+
+        <div className="space-y-2">
+          <label className="text-purple-300 text-sm font-semibold">Phone Numbers</label>
+          {phones.map((p, i) => (
+            <div key={i} className="flex gap-2 items-center flex-wrap">
+              <input value={p.label || ''} onChange={e => { const u = [...phones]; u[i] = { ...u[i], label: e.target.value }; setPhones(u); }}
+                placeholder="Label (e.g. Phone)" className="w-32 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+              <input value={p.number || ''} onChange={e => { const u = [...phones]; u[i] = { ...u[i], number: e.target.value }; setPhones(u); }}
+                placeholder="+234 ..." className="flex-1 min-w-[160px] px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+              <button onClick={() => setPhones(phones.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-300"><FiX /></button>
+            </div>
+          ))}
+          <button onClick={() => setPhones([...phones, { label: '', number: '' }])} className="text-sm text-purple-400 hover:text-purple-300 flex items-center gap-1"><FiPlus size={14} /> Add Phone</button>
+        </div>
+
+        <div>
+          <label className="text-purple-300 text-sm">Email</label>
+          <input value={email} onChange={e => setEmail(e.target.value)} placeholder="engeemosbookastay@gmail.com"
+            className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none" />
+        </div>
+        <div>
+          <label className="text-purple-300 text-sm">Address</label>
+          <input value={address} onChange={e => setAddress(e.target.value)} placeholder="Olomore, Abeokuta, Ogun State"
+            className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none" />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-purple-300 text-sm font-semibold">Social Links (full URLs)</label>
+          {socialKeys.map(k => (
+            <div key={k} className="flex gap-2 items-center">
+              <span className="w-24 text-purple-200 text-sm capitalize">{k}</span>
+              <input value={socials[k] || ''} onChange={e => setSocials({ ...socials, [k]: e.target.value })}
+                placeholder={k === 'whatsapp' ? 'https://wa.me/234...' : `https://...`}
+                className="flex-1 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+            </div>
+          ))}
+          <p className="text-purple-400 text-xs">WhatsApp: use a wa.me link (e.g. https://wa.me/2348066215431).</p>
+        </div>
+
+        <button onClick={() => handleSave('footer', { phones, email, address, socials })} disabled={saving}
+          className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
+          <FiSave /> {saving ? 'Saving...' : 'Save Footer'}
+        </button>
+      </div>
+    );
+  };
+
+  // Comparison table editor
+  const ComparisonEditor = () => {
+    const current = content.comparison?.value || {};
+    const [heading, setHeading] = useState(current.heading || '');
+    const [subheading, setSubheading] = useState(current.subheading || '');
+    const [columns, setColumns] = useState(current.columns || { ours: 'Book Direct With Us', theirs: 'Booking.com / 3rd-Party' });
+    const [rows, setRows] = useState(current.rows || []);
+    const [footnote, setFootnote] = useState(current.footnote || '');
+    const updateRow = (i, field, val) => { const u = [...rows]; u[i] = { ...u[i], [field]: val }; setRows(u); };
+
+    return (
+      <div className="space-y-4">
+        <h3 className="text-white font-bold">Homepage Comparison Table</h3>
+        <p className="text-purple-300 text-sm">Show guests what they save by booking direct vs third-party sites (e.g. Booking.com).</p>
+        <input value={heading} onChange={e => setHeading(e.target.value)} placeholder="Heading (e.g. Book Direct & Save)"
+          className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white font-semibold text-sm focus:outline-none" />
+        <input value={subheading} onChange={e => setSubheading(e.target.value)} placeholder="Subheading (optional)"
+          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none" />
+        <div className="grid grid-cols-2 gap-2">
+          <input value={columns.ours || ''} onChange={e => setColumns({ ...columns, ours: e.target.value })} placeholder="Our column header"
+            className="px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none" />
+          <input value={columns.theirs || ''} onChange={e => setColumns({ ...columns, theirs: e.target.value })} placeholder="Their column header"
+            className="px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none" />
+        </div>
+        <div className="space-y-2">
+          {rows.map((row, i) => (
+            <div key={i} className="flex gap-2 items-center flex-wrap">
+              <input value={row.label || ''} onChange={e => updateRow(i, 'label', e.target.value)} placeholder="Row label"
+                className="flex-1 min-w-[140px] px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+              <input value={row.ours || ''} onChange={e => updateRow(i, 'ours', e.target.value)} placeholder="Ours"
+                className="w-32 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+              <input value={row.theirs || ''} onChange={e => updateRow(i, 'theirs', e.target.value)} placeholder="Theirs"
+                className="w-32 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+              <button onClick={() => setRows(rows.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-300"><FiX /></button>
+            </div>
+          ))}
+          <button onClick={() => setRows([...rows, { label: '', ours: '', theirs: '' }])} className="text-sm text-purple-400 hover:text-purple-300 flex items-center gap-1"><FiPlus size={14} /> Add Row</button>
+        </div>
+        <input value={footnote} onChange={e => setFootnote(e.target.value)} placeholder="Footnote (optional)"
+          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none" />
+        <button onClick={() => handleSave('comparison', { heading, subheading, columns, rows, footnote })} disabled={saving}
+          className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
+          <FiSave /> {saving ? 'Saving...' : 'Save Comparison'}
+        </button>
+      </div>
+    );
+  };
+
+  // Homepage carousel editor
+  const CarouselEditor = () => {
+    const current = content.home_hero?.value || {};
+    const [slides, setSlides] = useState(current.slides || []);
+    const [uploading, setUploading] = useState(-1);
+    const updateSlide = (i, field, val) => { const u = [...slides]; u[i] = { ...u[i], [field]: val }; setSlides(u); };
+
+    const uploadImage = async (i, file) => {
+      if (!file) return;
+      setUploading(i);
+      try {
+        const fd = new FormData();
+        fd.append('image', file);
+        const res = await authFetch(`${API_URL}/admin/content/upload-image`, { method: 'POST', body: fd });
+        const d = await res.json();
+        if (d.success && d.url) {
+          const u = [...slides]; u[i] = { ...u[i], url: d.url }; setSlides(u);
+          showMessage('success', 'Image uploaded');
+        } else showMessage('error', d.message || 'Upload failed');
+      } catch { showMessage('error', 'Upload failed'); }
+      finally { setUploading(-1); }
+    };
+
+    return (
+      <div className="space-y-4">
+        <h3 className="text-white font-bold">Homepage Carousel</h3>
+        <p className="text-purple-300 text-sm">Images shown on the homepage hero carousel. If you leave this empty, the built-in default images are used.</p>
+        {slides.map((slide, i) => (
+          <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/20 space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-purple-300 text-sm font-semibold">Slide {i + 1}</span>
+              <button onClick={() => setSlides(slides.filter((_, j) => j !== i))} className="text-red-400 text-xs hover:text-red-300">Remove</button>
+            </div>
+            {slide.url
+              ? <img src={slide.url} alt="" className="w-full h-40 object-cover rounded-lg" />
+              : <div className="w-full h-40 bg-white/5 rounded-lg flex items-center justify-center text-purple-300 text-sm">No image yet</div>}
+            <label className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm cursor-pointer w-fit">
+              <FiUpload /> {uploading === i ? 'Uploading...' : (slide.url ? 'Replace Image' : 'Upload Image')}
+              <input type="file" accept="image/*" className="hidden" onChange={e => uploadImage(i, e.target.files?.[0])} />
+            </label>
+            <input value={slide.caption || ''} onChange={e => updateSlide(i, 'caption', e.target.value)} placeholder="Caption (optional)"
+              className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+            <input value={slide.subtitle || ''} onChange={e => updateSlide(i, 'subtitle', e.target.value)} placeholder="Subtitle (optional)"
+              className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+          </div>
+        ))}
+        <button onClick={() => setSlides([...slides, { url: '', caption: '', subtitle: '' }])} className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm"><FiPlus /> Add Slide</button>
+        <button onClick={() => handleSave('home_hero', { slides })} disabled={saving}
+          className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
+          <FiSave /> {saving ? 'Saving...' : 'Save Carousel'}
+        </button>
+      </div>
+    );
+  };
+
   const sections = [
     { key: 'about', label: 'About Us' },
     { key: 'getting_around', label: 'Getting Around' },
     { key: 'house_rules', label: 'House Rules' },
+    { key: 'footer', label: 'Footer' },
+    { key: 'comparison', label: 'Comparison' },
+    { key: 'home_hero', label: 'Carousel' },
   ];
 
   return (
@@ -1249,6 +1427,9 @@ const ContentTab = ({ showMessage }) => {
           {activeSection === 'about' && <AboutEditor />}
           {activeSection === 'getting_around' && <GettingAroundEditor />}
           {activeSection === 'house_rules' && <HouseRulesEditor />}
+          {activeSection === 'footer' && <FooterEditor />}
+          {activeSection === 'comparison' && <ComparisonEditor />}
+          {activeSection === 'home_hero' && <CarouselEditor />}
         </>
       )}
     </div>
