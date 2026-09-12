@@ -9,6 +9,7 @@ import {
   FiLock, FiCamera, FiThermometer, FiUmbrella, FiTruck, FiHeart, FiPrinter, FiFilm, FiTv
 } from 'react-icons/fi';
 import { DEFAULT_GETTING_AROUND } from '../data/gettingAroundDefaults';
+import { DEFAULT_CAROUSEL } from '../data/carouselDefaults';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:4000') + '/api';
 
@@ -1381,6 +1382,14 @@ const ContentTab = ({ showMessage }) => {
     const [slides, setSlides] = useState(current.slides || []);
     const [uploading, setUploading] = useState(-1);
     const updateSlide = (i, field, val) => { const u = [...slides]; u[i] = { ...u[i], [field]: val }; setSlides(u); };
+    const removeSlide = (i) => setSlides(slides.filter((_, j) => j !== i));
+    const moveSlide = (i, dir) => {
+      const j = i + dir;
+      if (j < 0 || j >= slides.length) return;
+      const u = [...slides];
+      [u[i], u[j]] = [u[j], u[i]];
+      setSlides(u);
+    };
 
     const uploadImage = async (i, file) => {
       if (!file) return;
@@ -1398,19 +1407,49 @@ const ContentTab = ({ showMessage }) => {
       finally { setUploading(-1); }
     };
 
+    // A slide only appears on the site once it has an uploaded photo.
+    const withImages = slides.filter((s) => s && s.url).length;
+
     return (
       <div className="space-y-4">
         <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">Homepage Carousel</h3>
-        <p className="text-purple-300 text-sm">Images shown on the homepage hero carousel. If you leave this empty, the built-in default images are used.</p>
+
+        {/* How it works — explains why this may look empty and how to take control */}
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-sm text-amber-100 space-y-1">
+          <p className="font-semibold text-amber-300">How the carousel works</p>
+          <p>Your homepage currently shows the <strong>built-in default images</strong>. As soon as you upload one or more images here and press <strong>Save</strong>, your images fully replace the defaults.</p>
+          <p>• Use <strong>▲ ▼</strong> to reorder slides, <strong>Remove</strong> to delete one.</p>
+          <p>• A slide with no uploaded photo is skipped on the site.</p>
+          <p>• To go back to the default images, remove <strong>all</strong> slides and Save.</p>
+        </div>
+
+        {slides.length === 0 && (
+          <div className="bg-white/5 border border-dashed border-white/20 rounded-xl p-6 text-center space-y-3">
+            <p className="text-purple-200 text-sm">No custom slides yet — the homepage is showing the built-in default images.</p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              <button onClick={() => setSlides([{ url: '', caption: '', subtitle: '' }])} className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm"><FiPlus /> Add your first slide</button>
+              <button onClick={() => setSlides(DEFAULT_CAROUSEL.map(s => ({ ...s })))} className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm"><FiImage /> Start from default captions</button>
+            </div>
+            <p className="text-purple-400 text-xs">“Start from default captions” fills in the current slide wording — just upload a photo into each one.</p>
+          </div>
+        )}
+
         {slides.map((slide, i) => (
           <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/20 space-y-2">
             <div className="flex justify-between items-center">
               <span className="text-purple-300 text-sm font-semibold">Slide {i + 1}</span>
-              <button onClick={() => setSlides(slides.filter((_, j) => j !== i))} className="text-red-400 text-xs hover:text-red-300">Remove</button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => moveSlide(i, -1)} disabled={i === 0} className="text-purple-300 hover:text-white disabled:opacity-30 text-sm px-1" title="Move up">▲</button>
+                <button onClick={() => moveSlide(i, 1)} disabled={i === slides.length - 1} className="text-purple-300 hover:text-white disabled:opacity-30 text-sm px-1" title="Move down">▼</button>
+                <button onClick={() => removeSlide(i)} className="text-red-400 text-xs hover:text-red-300">Remove</button>
+              </div>
             </div>
             {slide.url
               ? <img src={slide.url} alt="" className="w-full h-40 object-cover rounded-lg" />
-              : <div className="w-full h-40 bg-white/5 rounded-lg flex items-center justify-center text-purple-300 text-sm">No image yet</div>}
+              : <div className="w-full h-40 bg-white/5 rounded-lg flex flex-col items-center justify-center text-purple-300 text-sm gap-1">
+                  <span>No image yet</span>
+                  <span className="text-amber-300/80 text-xs px-4 text-center">Upload a photo — this slide is skipped on the site until you do.</span>
+                </div>}
             <label className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm cursor-pointer w-fit">
               <FiUpload /> {uploading === i ? 'Uploading...' : (slide.url ? 'Replace Image' : 'Upload Image')}
               <input type="file" accept="image/*" className="hidden" onChange={e => uploadImage(i, e.target.files?.[0])} />
@@ -1421,11 +1460,23 @@ const ContentTab = ({ showMessage }) => {
               className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
           </div>
         ))}
-        <button onClick={() => setSlides([...slides, { url: '', caption: '', subtitle: '' }])} className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm"><FiPlus /> Add Slide</button>
-        <button onClick={() => handleSave('home_hero', { slides })} disabled={saving}
-          className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
-          <FiSave /> {saving ? 'Saving...' : 'Save Carousel'}
-        </button>
+
+        {slides.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => setSlides([...slides, { url: '', caption: '', subtitle: '' }])} className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm"><FiPlus /> Add Slide</button>
+            <button onClick={() => { if (window.confirm('Remove all slides and go back to the built-in default images?')) setSlides([]); }} className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-red-300 rounded-lg text-sm"><FiTrash2 /> Reset to defaults</button>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <button onClick={() => handleSave('home_hero', { slides })} disabled={saving}
+            className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
+            <FiSave /> {saving ? 'Saving...' : 'Save Carousel'}
+          </button>
+          {slides.length > 0 && withImages === 0 && (
+            <span className="text-amber-300 text-xs">No photos uploaded yet — the site keeps showing the default images until you add at least one.</span>
+          )}
+        </div>
       </div>
     );
   };
