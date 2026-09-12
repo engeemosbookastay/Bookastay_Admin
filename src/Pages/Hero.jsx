@@ -8,6 +8,7 @@ import {
   FiBriefcase, FiSun, FiDroplet, FiCoffee, FiMapPin, FiAnchor, FiSliders, FiBookOpen,
   FiLock, FiCamera, FiThermometer, FiUmbrella, FiTruck, FiHeart, FiPrinter, FiFilm, FiTv
 } from 'react-icons/fi';
+import { DEFAULT_GETTING_AROUND } from '../data/gettingAroundDefaults';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:4000') + '/api';
 
@@ -554,7 +555,7 @@ const PropertiesTab = ({ showMessage }) => {
 
       {(editing || showAddForm) && (
         <div className="bg-white/5 border border-white/20 rounded-xl p-6 space-y-4">
-          <h3 className="text-white font-bold text-lg">{editing ? 'Edit Property' : 'Add New Property'}</h3>
+          <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">{editing ? 'Edit Property' : 'Add New Property'}</h3>
 
           {/* ── STEP 1: Set up this listing (defines availability grouping) ── */}
           <div className="bg-purple-500/10 border border-purple-400/30 rounded-lg p-4 space-y-3">
@@ -709,6 +710,21 @@ const PropertiesTab = ({ showMessage }) => {
           <div>
             <label className="block text-purple-200 text-sm mb-2">Amenities — tick all that apply</label>
             <AmenitiesPicker selected={form.amenities || []} onChange={v => setForm({ ...form, amenities: v })} />
+          </div>
+
+          {/* ── Calendar Sync (iCal) ── */}
+          <div>
+            <label className="block text-purple-200 text-sm mb-1">Calendar Sync — iCal URLs (optional)</label>
+            <p className="text-purple-400 text-xs mb-2">
+              Paste the calendar export links from Airbnb / Booking.com — <span className="text-amber-400 font-semibold">one per line</span>.
+              Dates booked on those sites get blocked here automatically, so you never get double-booked. Leave empty if you only take bookings on this site.
+            </p>
+            <textarea
+              value={Array.isArray(form.ical_urls) ? form.ical_urls.join('\n') : (form.ical_urls || '')}
+              onChange={e => setForm({ ...form, ical_urls: e.target.value })}
+              rows={3}
+              placeholder={'https://www.airbnb.com/calendar/ical/12345.ics?s=...\nhttps://ical.booking.com/v1/export?t=...'}
+              className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-purple-500" />
           </div>
           <div className="flex gap-3">
             <button onClick={handleSave} disabled={loading}
@@ -899,7 +915,7 @@ const DiscountsTab = ({ showMessage }) => {
 
       {showForm && (
         <div className="bg-white/5 border border-white/20 rounded-xl p-6 space-y-4">
-          <h3 className="text-white font-bold">{editingId ? 'Edit Discount Code' : 'Create Discount Code'}</h3>
+          <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">{editingId ? 'Edit Discount Code' : 'Create Discount Code'}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
               { label: 'Code (e.g. WELCOME20)', field: 'code', placeholder: 'SUMMER10' },
@@ -1038,7 +1054,7 @@ const ContentTab = ({ showMessage }) => {
 
     return (
       <div className="space-y-4">
-        <h3 className="text-white font-bold">About Us Text</h3>
+        <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">About Us Text</h3>
         <p className="text-purple-300 text-sm">Edit each paragraph. Use &lt;strong&gt; tags for bold text.</p>
         {paragraphs.map((para, i) => (
           <div key={i} className="relative">
@@ -1067,7 +1083,12 @@ const ContentTab = ({ showMessage }) => {
   // Getting Around editor
   const GettingAroundEditor = () => {
     const current = content.getting_around?.value || { categories: [] };
-    const [categories, setCategories] = useState(current.categories || []);
+    // Seed from the bundled defaults when the DB row is empty, so the owner
+    // sees and edits the real "current stuff" instead of a blank form. Once
+    // they save, this becomes the site_content override the public page merges.
+    const [categories, setCategories] = useState(
+      current.categories?.length ? current.categories : DEFAULT_GETTING_AROUND
+    );
 
     const updateCategory = (i, field, val) => {
       const updated = [...categories];
@@ -1095,7 +1116,7 @@ const ContentTab = ({ showMessage }) => {
 
     return (
       <div className="space-y-6">
-        <h3 className="text-white font-bold">Getting Around Content</h3>
+        <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">Getting Around Content</h3>
         {categories.map((cat, catI) => (
           <div key={catI} className="bg-white/5 rounded-xl p-4 border border-white/20">
             <input value={cat.title} onChange={e => updateCategory(catI, 'title', e.target.value)}
@@ -1175,7 +1196,7 @@ const ContentTab = ({ showMessage }) => {
 
     return (
       <div className="space-y-6">
-        <h3 className="text-white font-bold">House Rules</h3>
+        <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">House Rules</h3>
         <p className="text-purple-300 text-sm">Each rule is shown as a card on the House Rules page. "Details" are optional expandable sub-sections (e.g. for longer rules like power supply).</p>
         {rules.map((rule, i) => (
           <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/20 space-y-3">
@@ -1257,7 +1278,7 @@ const ContentTab = ({ showMessage }) => {
 
     return (
       <div className="space-y-4">
-        <h3 className="text-white font-bold">Footer</h3>
+        <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">Footer</h3>
         <p className="text-purple-300 text-sm">Phone numbers, email, address and social links shown in the site footer. Leave a social link blank to hide its icon.</p>
 
         <div className="space-y-2">
@@ -1318,7 +1339,7 @@ const ContentTab = ({ showMessage }) => {
 
     return (
       <div className="space-y-4">
-        <h3 className="text-white font-bold">Homepage Comparison Table</h3>
+        <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">Homepage Comparison Table</h3>
         <p className="text-purple-300 text-sm">Show guests what they save by booking direct vs third-party sites (e.g. Booking.com).</p>
         <input value={heading} onChange={e => setHeading(e.target.value)} placeholder="Heading (e.g. Book Direct & Save)"
           className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white font-semibold text-sm focus:outline-none" />
@@ -1379,7 +1400,7 @@ const ContentTab = ({ showMessage }) => {
 
     return (
       <div className="space-y-4">
-        <h3 className="text-white font-bold">Homepage Carousel</h3>
+        <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">Homepage Carousel</h3>
         <p className="text-purple-300 text-sm">Images shown on the homepage hero carousel. If you leave this empty, the built-in default images are used.</p>
         {slides.map((slide, i) => (
           <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/20 space-y-2">
@@ -1555,7 +1576,7 @@ const BlogTab = ({ showMessage }) => {
 
       {showForm && (
         <div className="bg-white/5 border border-white/20 rounded-xl p-6 space-y-4">
-          <h3 className="text-white font-bold">{editingId ? 'Edit Post' : 'Create Post'}</h3>
+          <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">{editingId ? 'Edit Post' : 'Create Post'}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {fields.map(({ label, field, type, placeholder }) => (
               <div key={field}>
@@ -1676,7 +1697,7 @@ const Hero = ({ onLogout }) => {
         <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6 border border-white/20">
           <div className="flex justify-between items-start gap-4 flex-wrap mb-2">
             <div>
-              <h1 className="text-3xl font-bold text-white">BookAStay Admin</h1>
+              <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">BookAStay Admin</h1>
               <p className="text-purple-200 mt-1">Logged in as <span className="text-white font-semibold">{adminName}</span></p>
             </div>
             <button onClick={onLogout}
