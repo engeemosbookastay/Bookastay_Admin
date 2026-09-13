@@ -403,9 +403,13 @@ const PropertiesTab = ({ showMessage }) => {
 
     setLoading(true);
     try {
+      // Images are managed on their own (upload / remove / reorder each save
+      // immediately), so never send the images array here — otherwise saving
+      // text fields would overwrite an order the owner just arranged.
+      const { images: _omitImages, ...formNoImages } = form;
       const res = await authFetch(url, {
         method, headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, ...grouping, amenities })
+        body: JSON.stringify({ ...formNoImages, ...grouping, amenities })
       });
       const d = await res.json();
       if (d.success) {
@@ -556,6 +560,58 @@ const PropertiesTab = ({ showMessage }) => {
   const takenRoomKeys = new Set((properties || []).filter(p => p.property_group === groupKey).map(p => p.room_key));
   const roomsInGroup = (properties || []).filter(p => p.property_group === groupKey && !p.blocks_group).length;
   const apartmentFull = !!entireListing && roomCount > 0 && roomsInGroup >= roomCount && !editing;
+
+  // The property currently being edited (live, so reorder/remove reflect instantly)
+  const liveProp = editing ? (properties || []).find(p => p.room_key === editing) : null;
+
+  // Shared thumbnail grid — used both in the list card and inside the edit form,
+  // so images can be reordered/removed from either place (each action persists
+  // immediately, so the order sticks with or without pressing Save).
+  const renderThumbs = (p) => {
+    const imgs = p.images || [];
+    if (imgs.length === 0) return null;
+    return (
+      <>
+        {imgs.length > 1 && (
+          <p className="text-purple-400/70 text-xs mb-2">
+            Use the arrows to arrange the order guests see. The first photo is the <span className="text-amber-400 font-semibold">cover</span>. Removing one never disturbs the rest.
+          </p>
+        )}
+        <div className="flex flex-wrap gap-3 mb-3">
+          {imgs.map((img, i) => (
+            <div key={img} className="relative group w-24">
+              <div className="relative w-24 h-24">
+                <img src={img} alt={`Property photo ${i + 1}`} className="w-24 h-24 object-cover rounded-lg border border-white/20" />
+                {i === 0 && (
+                  <span className="absolute top-1 left-1 bg-amber-500 text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded shadow">Cover</span>
+                )}
+                <button onClick={() => handleRemoveImage(p.room_key, img)}
+                  className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Remove this image">
+                  <FiX size={10} />
+                </button>
+              </div>
+              {imgs.length > 1 && (
+                <div className="flex items-center justify-between mt-1 gap-1">
+                  <button onClick={() => moveImage(p.room_key, i, -1)} disabled={i === 0}
+                    className="flex-1 flex items-center justify-center py-1 bg-white/10 hover:bg-white/20 rounded text-purple-200 disabled:opacity-25 disabled:cursor-not-allowed"
+                    title="Move earlier">
+                    <FiChevronLeft size={14} />
+                  </button>
+                  <span className="text-[10px] text-purple-400 w-3 text-center">{i + 1}</span>
+                  <button onClick={() => moveImage(p.room_key, i, 1)} disabled={i === imgs.length - 1}
+                    className="flex-1 flex items-center justify-center py-1 bg-white/10 hover:bg-white/20 rounded text-purple-200 disabled:opacity-25 disabled:cursor-not-allowed"
+                    title="Move later">
+                    <FiChevronRight size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  };
 
   // Keep property_group / blocks_group (and auto-fill the identity fields on a new listing) in sync with the setup choices
   const syncSetup = (over = {}) => {
