@@ -361,6 +361,18 @@ const PropertiesTab = ({ showMessage }) => {
     });
   };
 
+  // Nudge a staged (not-yet-uploaded) image earlier/later so it uploads in the
+  // exact order chosen. The first one becomes the cover.
+  const movePendingImage = (index, direction) => {
+    setPendingImages(prev => {
+      const target = index + direction;
+      if (target < 0 || target >= prev.length) return prev;
+      const updated = [...prev];
+      [updated[index], updated[target]] = [updated[target], updated[index]];
+      return updated;
+    });
+  };
+
   const handleSave = async () => {
     const isNew = !editing;
     const url = isNew ? `${API_URL}/admin/properties` : `${API_URL}/admin/properties/${editing}`;
@@ -493,6 +505,32 @@ const PropertiesTab = ({ showMessage }) => {
       const d = await res.json();
       if (!d.success) { showMessage('error', d.message || 'Could not remove image'); fetch_(); }
     } catch { showMessage('error', 'Could not remove image — restoring'); fetch_(); }
+  };
+
+  // Reorder images by moving one left/right in the list. The website shows them
+  // in exactly this order (the first image is the cover). We reorder the WHOLE
+  // array and save it, so removing or moving one photo never forces touching the
+  // others. Optimistic: the thumbnails rearrange instantly, then we persist.
+  const moveImage = async (room_key, index, direction) => {
+    const prop = properties.find(p => p.room_key === room_key);
+    const images = [...(prop?.images || [])];
+    const target = index + direction;
+    if (target < 0 || target >= images.length) return; // already at an end
+    [images[index], images[target]] = [images[target], images[index]]; // swap
+
+    // Show the new order immediately
+    setProperties(prev => prev.map(p =>
+      p.room_key === room_key ? { ...p, images } : p
+    ));
+    // Persist the full ordered array (updateProperty stores it as-is)
+    try {
+      const res = await authFetch(`${API_URL}/admin/properties/${room_key}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images }),
+      });
+      const d = await res.json();
+      if (!d.success) { showMessage('error', d.message || 'Could not save the new order'); fetch_(); }
+    } catch { showMessage('error', 'Could not save image order — restoring'); fetch_(); }
   };
 
   const fields = [
@@ -662,36 +700,53 @@ const PropertiesTab = ({ showMessage }) => {
           <div>
             <label className="block text-purple-200 text-sm mb-1">Property Images</label>
             <p className="text-purple-400 text-xs mb-3">
-              Select one or more images. The <span className="text-amber-400 font-semibold">first image</span> is the main cover photo.
-              Hover any image and click <span className="text-amber-400 font-semibold">Set as Main</span> to change the order.
+              Select one or more images — they upload in the order shown here, and the <span className="text-amber-400 font-semibold">first image</span> is the cover photo.
+              Use the arrows to arrange them, or hover an image and click <span className="text-amber-400 font-semibold">Set as Main</span> to jump it to the front.
             </p>
 
             {pendingImages.length > 0 && (
               <div className="flex flex-wrap gap-3 mb-4">
                 {pendingImages.map((file, i) => (
-                  <div key={i} className="relative group w-24 h-24 shrink-0">
-                    <img
-                      src={URL.createObjectURL(file)}
-                      alt={`preview-${i}`}
-                      className={`w-24 h-24 object-cover rounded-xl border-2 transition ${i === 0 ? 'border-amber-400' : 'border-white/20'}`}
-                    />
-                    {i === 0 && (
-                      <span className="absolute top-1 left-1 bg-amber-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
-                        Main
-                      </span>
-                    )}
-                    <div className="absolute inset-0 rounded-xl bg-black/50 flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {i !== 0 && (
-                        <button type="button" onClick={() => setPendingAsMain(i)}
-                          className="bg-amber-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full w-fit">
-                          Set as Main
-                        </button>
+                  <div key={i} className="w-24 shrink-0">
+                    <div className="relative group w-24 h-24">
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={`preview-${i}`}
+                        className={`w-24 h-24 object-cover rounded-xl border-2 transition ${i === 0 ? 'border-amber-400' : 'border-white/20'}`}
+                      />
+                      {i === 0 && (
+                        <span className="absolute top-1 left-1 bg-amber-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                          Main
+                        </span>
                       )}
-                      <button type="button" onClick={() => removePendingImage(i)}
-                        className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full w-fit">
-                        Remove
-                      </button>
+                      <div className="absolute inset-0 rounded-xl bg-black/50 flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {i !== 0 && (
+                          <button type="button" onClick={() => setPendingAsMain(i)}
+                            className="bg-amber-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full w-fit">
+                            Set as Main
+                          </button>
+                        )}
+                        <button type="button" onClick={() => removePendingImage(i)}
+                          className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full w-fit">
+                          Remove
+                        </button>
+                      </div>
                     </div>
+                    {pendingImages.length > 1 && (
+                      <div className="flex items-center justify-between mt-1 gap-1">
+                        <button type="button" onClick={() => movePendingImage(i, -1)} disabled={i === 0}
+                          className="flex-1 flex items-center justify-center py-1 bg-white/10 hover:bg-white/20 rounded text-purple-200 disabled:opacity-25 disabled:cursor-not-allowed"
+                          title="Move earlier">
+                          <FiChevronLeft size={14} />
+                        </button>
+                        <span className="text-[10px] text-purple-400 w-3 text-center">{i + 1}</span>
+                        <button type="button" onClick={() => movePendingImage(i, 1)} disabled={i === pendingImages.length - 1}
+                          className="flex-1 flex items-center justify-center py-1 bg-white/10 hover:bg-white/20 rounded text-purple-200 disabled:opacity-25 disabled:cursor-not-allowed"
+                          title="Move later">
+                          <FiChevronRight size={14} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -779,15 +834,42 @@ const PropertiesTab = ({ showMessage }) => {
 
           {/* Images */}
           <div className="mt-3">
-            <p className="text-purple-300 text-sm font-medium mb-2">Images ({(p.images || []).length})</p>
-            <div className="flex flex-wrap gap-2 mb-3">
+            <p className="text-purple-300 text-sm font-medium mb-1">Images ({(p.images || []).length})</p>
+            {(p.images || []).length > 1 && (
+              <p className="text-purple-400/70 text-xs mb-2">
+                Use the arrows to arrange the order guests see. The first photo is the <span className="text-amber-400 font-semibold">cover</span>. Removing one never disturbs the rest.
+              </p>
+            )}
+            <div className="flex flex-wrap gap-3 mb-3">
               {(p.images || []).map((img, i) => (
-                <div key={i} className="relative group w-20 h-20">
-                  <img src={img} alt={`Property ${i}`} className="w-20 h-20 object-cover rounded-lg border border-white/20" />
-                  <button onClick={() => handleRemoveImage(p.room_key, img)}
-                    className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <FiX size={10} />
-                  </button>
+                <div key={img} className="relative group w-24">
+                  <div className="relative w-24 h-24">
+                    <img src={img} alt={`Property photo ${i + 1}`} className="w-24 h-24 object-cover rounded-lg border border-white/20" />
+                    {i === 0 && (
+                      <span className="absolute top-1 left-1 bg-amber-500 text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded shadow">Cover</span>
+                    )}
+                    <button onClick={() => handleRemoveImage(p.room_key, img)}
+                      className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Remove this image">
+                      <FiX size={10} />
+                    </button>
+                  </div>
+                  {/* Reorder controls — move this photo earlier/later without deleting */}
+                  {(p.images || []).length > 1 && (
+                    <div className="flex items-center justify-between mt-1 gap-1">
+                      <button onClick={() => moveImage(p.room_key, i, -1)} disabled={i === 0}
+                        className="flex-1 flex items-center justify-center py-1 bg-white/10 hover:bg-white/20 rounded text-purple-200 disabled:opacity-25 disabled:cursor-not-allowed"
+                        title="Move earlier">
+                        <FiChevronLeft size={14} />
+                      </button>
+                      <span className="text-[10px] text-purple-400 w-3 text-center">{i + 1}</span>
+                      <button onClick={() => moveImage(p.room_key, i, 1)} disabled={i === (p.images || []).length - 1}
+                        className="flex-1 flex items-center justify-center py-1 bg-white/10 hover:bg-white/20 rounded text-purple-200 disabled:opacity-25 disabled:cursor-not-allowed"
+                        title="Move later">
+                        <FiChevronRight size={14} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
