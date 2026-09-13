@@ -1,6 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FiMail, FiLock, FiEye, FiEyeOff, FiLoader } from 'react-icons/fi';
 import { backendUrl } from '../App';
+
+// The backend can miss the very first request while it's waking up — Render's
+// free tier sleeps after inactivity, and a local server may have just restarted
+// (on Windows the first hit to "localhost" can even be refused before falling
+// back to IPv4). Retrying on a *network* failure only — never on a real HTTP
+// response like 401 — makes login work on the first click instead of forcing the
+// admin to press "Sign In" twice.
+async function fetchWithWakeRetry(url, options, { attempts = 3, backoffMs = 1200, onRetry } = {}) {
+  let lastErr;
+  for (let i = 1; i <= attempts; i++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60000); // allow a slow cold start
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts) { onRetry?.(i); await new Promise(r => setTimeout(r, backoffMs * i)); }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
+}
 
 export default function Login({ onLogin }) {
   const [email, setEmail]       = useState('');
@@ -8,17 +31,33 @@ export default function Login({ onLogin }) {
   const [showPw, setShowPw]     = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
+  const [status, setStatus]     = useState('');
+
+  // Nudge the backend awake the moment the login screen opens, so the real
+  // sign-in request lands on a warm server. Failures here are ignored on purpose.
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60000);
+    fetch(`${backendUrl}/api/content`, { signal: controller.signal }).catch(() => {});
+    return () => { clearTimeout(timer); };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setStatus('');
     setLoading(true);
     try {
-      const res  = await fetch(`${backendUrl}/api/admin/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      const res  = await fetchWithWakeRetry(
+        `${backendUrl}/api/admin/login`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        },
+        { onRetry: () => setStatus('Waking up the server… hang on a moment.') },
+      );
+      setStatus('');
       const data = await res.json();
       if (!res.ok || !data.success) {
         setError(data.message || 'Invalid credentials');
@@ -28,9 +67,10 @@ export default function Login({ onLogin }) {
       sessionStorage.setItem('admin_name',  data.admin?.name || 'Admin');
       onLogin(data.token, data.admin);
     } catch {
-      setError('Cannot reach server. Make sure the backend is running.');
+      setError('Cannot reach the server after several tries. Make sure the backend is running, then try again.');
     } finally {
       setLoading(false);
+      setStatus('');
     }
   };
 
@@ -95,6 +135,13 @@ export default function Login({ onLogin }) {
                 </button>
               </div>
             </div>
+
+            {/* Waking-up status (neutral) */}
+            {status && !error && (
+              <div className="bg-purple-500/15 border border-purple-500/40 rounded-xl px-4 py-3 text-purple-200 text-sm flex items-center gap-2">
+                <FiLoader className="animate-spin shrink-0" size={16} /> {status}
+              </div>
+            )}
 
             {/* Error */}
             {error && (
