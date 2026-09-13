@@ -3,7 +3,7 @@ import {
   FiCalendar, FiTrash2, FiUsers, FiHome, FiAlertCircle,
   FiCheckCircle, FiXCircle, FiPlus, FiRefreshCw, FiEdit2,
   FiTag, FiImage, FiFileText, FiDollarSign, FiToggleLeft, FiToggleRight,
-  FiSave, FiUpload, FiX,
+  FiSave, FiUpload, FiX, FiChevronLeft, FiChevronRight,
   FiWifi, FiWind, FiMonitor, FiZap, FiShield, FiActivity,
   FiBriefcase, FiSun, FiDroplet, FiCoffee, FiMapPin, FiAnchor, FiSliders, FiBookOpen,
   FiLock, FiCamera, FiThermometer, FiUmbrella, FiTruck, FiHeart, FiPrinter, FiFilm, FiTv
