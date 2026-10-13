@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FiCalendar, FiTrash2, FiUsers, FiHome, FiAlertCircle,
   FiCheckCircle, FiXCircle, FiPlus, FiRefreshCw, FiEdit2,
   FiTag, FiImage, FiFileText, FiDollarSign, FiToggleLeft, FiToggleRight,
+<<<<<<< HEAD
   FiSave, FiUpload, FiX, FiChevronLeft, FiChevronRight, FiArrowUp, FiArrowDown,
+=======
+  FiSave, FiUpload, FiX, FiChevronLeft, FiChevronRight, FiChevronUp, FiChevronDown, FiMove,
+>>>>>>> 44f8aeacd682d1ae790514e4be172aaa1b63071f
   FiWifi, FiWind, FiMonitor, FiZap, FiShield, FiActivity,
   FiBriefcase, FiSun, FiDroplet, FiCoffee, FiMapPin, FiAnchor, FiSliders, FiBookOpen,
   FiLock, FiCamera, FiThermometer, FiUmbrella, FiTruck, FiHeart, FiPrinter, FiFilm, FiTv
@@ -1131,6 +1136,18 @@ const DiscountsTab = ({ showMessage }) => {
 };
 
 // ─── TAB: Content Editor ──────────────────────────────────────────
+// Save button pinned to the side of the screen so long editors can be saved
+// without scrolling to the bottom. Rendered alongside each editor's own button.
+// Portaled to <body> because the admin panel's backdrop-blur/overflow-hidden
+// wrapper would otherwise trap and clip a position:fixed element.
+const FloatingSave = ({ onClick, saving, label }) => createPortal(
+  <button onClick={onClick} disabled={saving} title={label}
+    className="fixed z-40 right-4 bottom-6 md:bottom-auto md:top-1/2 md:-translate-y-1/2 flex items-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-full shadow-2xl shadow-purple-900/60 border border-white/20 disabled:opacity-50 transition-colors">
+    <FiSave size={16} /> {saving ? 'Saving...' : label}
+  </button>,
+  document.body
+);
+
 const ContentTab = ({ showMessage }) => {
   const [activeSection, setActiveSection] = useState('about');
   const [content, setContent] = useState({});
@@ -1157,7 +1174,12 @@ const ContentTab = ({ showMessage }) => {
         body: JSON.stringify({ value })
       });
       const d = await res.json();
-      if (d.success) { showMessage('success', 'Content saved!'); fetch_(); }
+      if (d.success) {
+        // Show exactly what the server stored right away, then re-sync.
+        if (d.content) setContent(prev => ({ ...prev, [key]: { ...prev[key], value: d.content.value } }));
+        showMessage('success', 'Content saved!');
+        fetch_();
+      }
       else showMessage('error', d.message);
     } catch { showMessage('error', 'Save failed'); }
     finally { setSaving(false); }
@@ -1192,6 +1214,7 @@ const ContentTab = ({ showMessage }) => {
           className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
           <FiSave /> {saving ? 'Saving...' : 'Save About Content'}
         </button>
+        <FloatingSave onClick={() => handleSave('about', { paragraphs })} saving={saving} label={'Save About Content'} />
       </div>
     );
   };
@@ -1199,11 +1222,11 @@ const ContentTab = ({ showMessage }) => {
   // Getting Around editor
   const GettingAroundEditor = () => {
     const current = content.getting_around?.value || { categories: [] };
-    // Seed from the bundled defaults when the DB row is empty, so the owner
-    // sees and edits the real "current stuff" instead of a blank form. Once
-    // they save, this becomes the site_content override the public page merges.
+    // Seed from the bundled defaults only if this section was never saved (the
+    // public page shows the same defaults then). Once saved, the stored list is
+    // exactly what the public page shows — an emptied list stays empty.
     const [categories, setCategories] = useState(
-      current.categories?.length ? current.categories : DEFAULT_GETTING_AROUND
+      Array.isArray(current.categories) && content.getting_around ? current.categories : DEFAULT_GETTING_AROUND
     );
 
     const updateCategory = (i, field, val) => {
@@ -1260,6 +1283,7 @@ const ContentTab = ({ showMessage }) => {
           className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
           <FiSave /> {saving ? 'Saving...' : 'Save Getting Around Content'}
         </button>
+        <FloatingSave onClick={() => handleSave('getting_around', { categories })} saving={saving} label={'Save Getting Around Content'} />
       </div>
     );
   };
@@ -1267,7 +1291,18 @@ const ContentTab = ({ showMessage }) => {
   // House Rules editor
   const HouseRulesEditor = () => {
     const current = content.house_rules?.value || { rules: [] };
-    const [rules, setRules] = useState(current.rules || []);
+    // Fold the legacy single "extra" field into the paragraphs list so every
+    // follow-up paragraph is edited the same way.
+    const [rules, setRules] = useState(() => (current.rules || []).map(r => {
+      const paragraphs = Array.isArray(r.paragraphs) ? [...r.paragraphs] : [];
+      if (r.extra && r.extra.trim()) paragraphs.unshift(r.extra);
+      return { ...r, extra: '', paragraphs };
+    }));
+    // Which paragraph is open per rule: 'main', a paragraph index, or null.
+    // Only one paragraph per rule is open at a time.
+    const [openPara, setOpenPara] = useState({});
+    const togglePara = (ruleI, key) =>
+      setOpenPara(prev => ({ ...prev, [ruleI]: prev[ruleI] === key ? null : key }));
 
     const updateRule = (i, field, val) => {
       const updated = [...rules];
@@ -1275,8 +1310,79 @@ const ContentTab = ({ showMessage }) => {
       setRules(updated);
     };
 
-    const addRule = () => setRules([...rules, { title: '', category: '', content: '', extra: '', details: [] }]);
-    const removeRule = (i) => setRules(rules.filter((_, j) => j !== i));
+    const addRule = () => {
+      setRules([...rules, { title: '', category: '', content: '', extra: '', paragraphs: [], details: [] }]);
+      setOpenPara(prev => ({ ...prev, [rules.length]: 'main' }));
+    };
+    const removeRule = (i) => {
+      setRules(rules.filter((_, j) => j !== i));
+      setOpenPara({});
+    };
+    // Drag-and-drop reordering — the order here is exactly the order on the site.
+    const [dragFrom, setDragFrom] = useState(null);
+    const [dragOver, setDragOver] = useState(null);
+    const dropRule = (to) => {
+      const from = dragFrom;
+      setDragFrom(null); setDragOver(null);
+      if (from === null || from === to) return;
+      const updated = [...rules];
+      const [moved] = updated.splice(from, 1);
+      updated.splice(to, 0, moved);
+      setRules(updated);
+      setOpenPara({});
+    };
+
+    const moveRule = (i, dir) => {
+      const j = i + dir;
+      if (j < 0 || j >= rules.length) return;
+      const updated = [...rules];
+      [updated[i], updated[j]] = [updated[j], updated[i]];
+      setRules(updated);
+      setOpenPara(prev => ({ ...prev, [i]: prev[j], [j]: prev[i] }));
+    };
+
+    const addParagraph = (ruleI) => {
+      const updated = [...rules];
+      const paragraphs = [...(updated[ruleI].paragraphs || []), ''];
+      updated[ruleI] = { ...updated[ruleI], paragraphs };
+      setRules(updated);
+      setOpenPara(prev => ({ ...prev, [ruleI]: paragraphs.length - 1 }));
+    };
+    const updateParagraph = (ruleI, pI, val) => {
+      const updated = [...rules];
+      const paragraphs = [...updated[ruleI].paragraphs];
+      paragraphs[pI] = val;
+      updated[ruleI] = { ...updated[ruleI], paragraphs };
+      setRules(updated);
+    };
+    const removeParagraph = (ruleI, pI) => {
+      const updated = [...rules];
+      updated[ruleI] = { ...updated[ruleI], paragraphs: updated[ruleI].paragraphs.filter((_, j) => j !== pI) };
+      setRules(updated);
+      setOpenPara(prev => ({ ...prev, [ruleI]: null }));
+    };
+    const moveParagraph = (ruleI, pI, dir) => {
+      const j = pI + dir;
+      const paragraphs = [...rules[ruleI].paragraphs];
+      if (j < 0 || j >= paragraphs.length) return;
+      [paragraphs[pI], paragraphs[j]] = [paragraphs[j], paragraphs[pI]];
+      const updated = [...rules];
+      updated[ruleI] = { ...updated[ruleI], paragraphs };
+      setRules(updated);
+      setOpenPara(prev => ({ ...prev, [ruleI]: j }));
+    };
+
+    const preview = (text) => {
+      const t = (text || '').trim();
+      if (!t) return <span className="italic text-white/40">Empty — click to write</span>;
+      return t.length > 90 ? `${t.slice(0, 90)}…` : t;
+    };
+
+    const cleanForSave = () => rules.map(r => ({
+      ...r,
+      extra: '',
+      paragraphs: (r.paragraphs || []).filter(p => p && p.trim()),
+    }));
 
     // Move rule at index `from` to position `to` (0-based); the site shows rules in this order.
     const moveRule = (from, to) => {
@@ -1322,6 +1428,7 @@ const ContentTab = ({ showMessage }) => {
     return (
       <div className="space-y-6">
         <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">House Rules</h3>
+<<<<<<< HEAD
         <p className="text-purple-300 text-sm">Each rule is shown as a card on the House Rules page, in the order listed here — use the number or arrows to reorder, then save. "Details" are optional expandable sub-sections (e.g. for longer rules like power supply).</p>
         {rules.map((rule, i) => (
           <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/20 space-y-3">
@@ -1337,6 +1444,35 @@ const ContentTab = ({ showMessage }) => {
                   className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 disabled:cursor-not-allowed"><FiArrowUp size={14} /></button>
                 <button onClick={() => moveRule(i, i + 1)} disabled={i === rules.length - 1} title="Move down"
                   className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 disabled:cursor-not-allowed"><FiArrowDown size={14} /></button>
+=======
+        <p className="text-purple-300 text-sm">Each rule is shown as a card on the House Rules page, in this exact order. Drag a rule by its handle (or use the arrows) to reorder it. Removing a rule here removes it from the site after you save. "Details" are optional expandable sub-sections (e.g. for longer rules like power supply).</p>
+        {rules.map((rule, i) => (
+          <div key={i}
+            onDragOver={e => { if (dragFrom === null) return; e.preventDefault(); if (dragOver !== i) setDragOver(i); }}
+            onDrop={e => { e.preventDefault(); dropRule(i); }}
+            className={`bg-white/5 rounded-xl p-4 border space-y-3 transition-all ${
+              dragFrom === i ? 'opacity-40 border-white/20'
+              : dragOver === i && dragFrom !== null ? 'border-amber-400 ring-2 ring-amber-400/50'
+              : 'border-white/20'}`}>
+            <div className="flex justify-between items-center gap-2">
+              <div className="flex items-center gap-2">
+                <span draggable
+                  onDragStart={e => { setDragFrom(i); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(i)); }}
+                  onDragEnd={() => { setDragFrom(null); setDragOver(null); }}
+                  title="Drag to reorder"
+                  className="cursor-grab active:cursor-grabbing select-none p-1 rounded bg-white/10 hover:bg-white/20 text-white">
+                  <FiMove size={14} />
+                </span>
+                <span className="text-purple-300 text-sm font-semibold">Rule {i + 1}{rule.title ? ` — ${rule.title}` : ''}</span>
+                <button onClick={() => moveRule(i, -1)} disabled={i === 0} title="Move up"
+                  className="p-1 rounded bg-white/10 hover:bg-white/20 text-white disabled:opacity-30">
+                  <FiChevronUp size={14} />
+                </button>
+                <button onClick={() => moveRule(i, 1)} disabled={i === rules.length - 1} title="Move down"
+                  className="p-1 rounded bg-white/10 hover:bg-white/20 text-white disabled:opacity-30">
+                  <FiChevronDown size={14} />
+                </button>
+>>>>>>> 44f8aeacd682d1ae790514e4be172aaa1b63071f
               </div>
               <button onClick={() => removeRule(i)} className="text-red-400 text-xs hover:text-red-300">Remove Rule</button>
             </div>
@@ -1348,12 +1484,66 @@ const ContentTab = ({ showMessage }) => {
                 placeholder="Category (e.g. Health & Safety)"
                 className="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none" />
             </div>
-            <textarea value={rule.content || ''} onChange={e => updateRule(i, 'content', e.target.value)} rows={3}
-              placeholder="Main rule text"
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
-            <textarea value={rule.extra || ''} onChange={e => updateRule(i, 'extra', e.target.value)} rows={2}
-              placeholder="Extra text (optional)"
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+            {/* Paragraphs accordion: main paragraph + any number of follow-ups, one open at a time */}
+            <div className="space-y-2">
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 overflow-hidden">
+                <button type="button" onClick={() => togglePara(i, 'main')}
+                  className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left">
+                  <div className="min-w-0">
+                    <div className="text-amber-300 text-xs font-semibold uppercase">Main Paragraph</div>
+                    {openPara[i] !== 'main' && <div className="text-white/70 text-xs truncate">{preview(rule.content)}</div>}
+                  </div>
+                  {openPara[i] === 'main' ? <FiChevronUp className="text-amber-300 flex-shrink-0" /> : <FiChevronDown className="text-amber-300 flex-shrink-0" />}
+                </button>
+                {openPara[i] === 'main' && (
+                  <div className="px-3 pb-3 space-y-2">
+                    <textarea value={rule.content || ''} onChange={e => updateRule(i, 'content', e.target.value)} rows={5}
+                      placeholder="Main rule text"
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+                    <button type="button" onClick={() => togglePara(i, 'main')}
+                      className="text-xs px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-white">Close</button>
+                  </div>
+                )}
+              </div>
+
+              {(rule.paragraphs || []).map((para, pi) => {
+                const isOpen = openPara[i] === pi;
+                return (
+                  <div key={pi} className="rounded-lg border border-white/15 bg-white/5 overflow-hidden">
+                    <div className="flex items-center gap-2 px-3 py-2">
+                      <button type="button" onClick={() => togglePara(i, pi)}
+                        className="flex-1 min-w-0 flex items-center justify-between gap-3 text-left">
+                        <div className="min-w-0">
+                          <div className="text-purple-300 text-xs font-semibold uppercase">Paragraph {pi + 2}</div>
+                          {!isOpen && <div className="text-white/70 text-xs truncate">{preview(para)}</div>}
+                        </div>
+                        {isOpen ? <FiChevronUp className="text-purple-300 flex-shrink-0" /> : <FiChevronDown className="text-purple-300 flex-shrink-0" />}
+                      </button>
+                      <button type="button" onClick={() => moveParagraph(i, pi, -1)} disabled={pi === 0} title="Move up"
+                        className="p-1 rounded hover:bg-white/10 text-white disabled:opacity-30"><FiChevronUp size={12} /></button>
+                      <button type="button" onClick={() => moveParagraph(i, pi, 1)} disabled={pi === rule.paragraphs.length - 1} title="Move down"
+                        className="p-1 rounded hover:bg-white/10 text-white disabled:opacity-30"><FiChevronDown size={12} /></button>
+                      <button type="button" onClick={() => removeParagraph(i, pi)} title="Remove paragraph"
+                        className="p-1 text-red-400 hover:text-red-300"><FiX size={14} /></button>
+                    </div>
+                    {isOpen && (
+                      <div className="px-3 pb-3 space-y-2">
+                        <textarea value={para} onChange={e => updateParagraph(i, pi, e.target.value)} rows={5}
+                          placeholder={`Paragraph ${pi + 2}`}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+                        <button type="button" onClick={() => togglePara(i, pi)}
+                          className="text-xs px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-white">Close</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <button type="button" onClick={() => addParagraph(i)}
+                className="text-sm text-amber-300 hover:text-amber-200 flex items-center gap-1">
+                <FiPlus size={14} /> Add Another Paragraph
+              </button>
+            </div>
 
             <div className="pl-4 border-l-2 border-amber-500/20 space-y-3">
               <span className="text-purple-300 text-xs font-semibold uppercase">Expandable Details (optional)</span>
@@ -1395,10 +1585,85 @@ const ContentTab = ({ showMessage }) => {
         <button onClick={addRule} className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm">
           <FiPlus /> Add Rule
         </button>
-        <button onClick={() => handleSave('house_rules', { rules })} disabled={saving}
+        <button onClick={() => handleSave('house_rules', { rules: cleanForSave() })} disabled={saving}
           className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
           <FiSave /> {saving ? 'Saving...' : 'Save House Rules'}
         </button>
+        <FloatingSave onClick={() => handleSave('house_rules', { rules: cleanForSave() })} saving={saving} label={'Save House Rules'} />
+      </div>
+    );
+  };
+
+  // Legal-policy editor — shared by Cancellation & Privacy. Both are just a list
+  // of cards, each with a title and one or more paragraphs. The card icon and
+  // colour are chosen by position on the public page, so the owner edits wording
+  // only and never has to think about styling.
+  const PolicyEditor = ({ storeKey, heading, help, defaults }) => {
+    const current = content[storeKey]?.value || {};
+    // Defaults only if never saved — mirrors what the public page shows.
+    const [items, setItems] = useState(Array.isArray(current.items) && content[storeKey] ? current.items : defaults);
+
+    const updateItem = (i, field, val) => {
+      const updated = [...items];
+      updated[i] = { ...updated[i], [field]: val };
+      setItems(updated);
+    };
+    const addItem = () => setItems([...items, { title: '', content: [''] }]);
+    const removeItem = (i) => setItems(items.filter((_, j) => j !== i));
+
+    const updatePara = (i, pi, val) => {
+      const updated = [...items];
+      const paras = [...(updated[i].content || [])];
+      paras[pi] = val;
+      updated[i] = { ...updated[i], content: paras };
+      setItems(updated);
+    };
+    const addPara = (i) => {
+      const updated = [...items];
+      updated[i] = { ...updated[i], content: [...(updated[i].content || []), ''] };
+      setItems(updated);
+    };
+    const removePara = (i, pi) => {
+      const updated = [...items];
+      updated[i] = { ...updated[i], content: (updated[i].content || []).filter((_, j) => j !== pi) };
+      setItems(updated);
+    };
+
+    return (
+      <div className="space-y-6">
+        <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">{heading}</h3>
+        <p className="text-purple-300 text-sm">{help}</p>
+        {items.map((item, i) => (
+          <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/20 space-y-3">
+            <div className="flex justify-between items-center gap-2">
+              <input value={item.title || ''} onChange={e => updateItem(i, 'title', e.target.value)}
+                placeholder="Section title"
+                className="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white font-semibold text-sm focus:outline-none" />
+              <button onClick={() => removeItem(i)} className="text-red-400 text-xs hover:text-red-300 shrink-0">Remove</button>
+            </div>
+            <div className="space-y-2 pl-3 border-l-2 border-amber-500/20">
+              {(item.content || []).map((para, pi) => (
+                <div key={pi} className="flex gap-2 items-start">
+                  <textarea value={para} rows={3} onChange={e => updatePara(i, pi, e.target.value)}
+                    placeholder={`Paragraph ${pi + 1}`}
+                    className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+                  <button onClick={() => removePara(i, pi)} className="text-red-400 hover:text-red-300 mt-2" title="Remove paragraph"><FiX size={14} /></button>
+                </div>
+              ))}
+              <button onClick={() => addPara(i)} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                <FiPlus size={12} /> Add Paragraph
+              </button>
+            </div>
+          </div>
+        ))}
+        <button onClick={addItem} className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm">
+          <FiPlus /> Add Section
+        </button>
+        <button onClick={() => handleSave(storeKey, { items })} disabled={saving}
+          className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
+          <FiSave /> {saving ? 'Saving...' : `Save ${heading}`}
+        </button>
+        <FloatingSave onClick={() => handleSave(storeKey, { items })} saving={saving} label={`Save ${heading}`} />
       </div>
     );
   };
@@ -1531,6 +1796,7 @@ const ContentTab = ({ showMessage }) => {
           className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
           <FiSave /> {saving ? 'Saving...' : 'Save Footer'}
         </button>
+        <FloatingSave onClick={() => handleSave('footer', { phones, email, address, socials })} saving={saving} label={'Save Footer'} />
       </div>
     );
   };
@@ -1579,6 +1845,7 @@ const ContentTab = ({ showMessage }) => {
           className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
           <FiSave /> {saving ? 'Saving...' : 'Save Comparison'}
         </button>
+        <FloatingSave onClick={() => handleSave('comparison', { heading, subheading, columns, rows, footnote })} saving={saving} label={'Save Comparison'} />
       </div>
     );
   };
@@ -1680,6 +1947,7 @@ const ContentTab = ({ showMessage }) => {
             className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
             <FiSave /> {saving ? 'Saving...' : 'Save Carousel'}
           </button>
+          <FloatingSave onClick={() => handleSave('home_hero', { slides })} saving={saving} label={'Save Carousel'} />
           {slides.length > 0 && withImages === 0 && (
             <span className="text-amber-300 text-xs">No photos uploaded yet — the site keeps showing the default images until you add at least one.</span>
           )}
