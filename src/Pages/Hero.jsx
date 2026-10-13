@@ -4,11 +4,7 @@ import {
   FiCalendar, FiTrash2, FiUsers, FiHome, FiAlertCircle,
   FiCheckCircle, FiXCircle, FiPlus, FiRefreshCw, FiEdit2,
   FiTag, FiImage, FiFileText, FiDollarSign, FiToggleLeft, FiToggleRight,
-<<<<<<< HEAD
-  FiSave, FiUpload, FiX, FiChevronLeft, FiChevronRight, FiArrowUp, FiArrowDown,
-=======
   FiSave, FiUpload, FiX, FiChevronLeft, FiChevronRight, FiChevronUp, FiChevronDown, FiMove,
->>>>>>> 44f8aeacd682d1ae790514e4be172aaa1b63071f
   FiWifi, FiWind, FiMonitor, FiZap, FiShield, FiActivity,
   FiBriefcase, FiSun, FiDroplet, FiCoffee, FiMapPin, FiAnchor, FiSliders, FiBookOpen,
   FiLock, FiCamera, FiThermometer, FiUmbrella, FiTruck, FiHeart, FiPrinter, FiFilm, FiTv
@@ -1384,15 +1380,6 @@ const ContentTab = ({ showMessage }) => {
       paragraphs: (r.paragraphs || []).filter(p => p && p.trim()),
     }));
 
-    // Move rule at index `from` to position `to` (0-based); the site shows rules in this order.
-    const moveRule = (from, to) => {
-      if (to < 0 || to >= rules.length || to === from) return;
-      const updated = [...rules];
-      const [moved] = updated.splice(from, 1);
-      updated.splice(to, 0, moved);
-      setRules(updated);
-    };
-
     const addDetail = (ruleI) => {
       const updated = [...rules];
       updated[ruleI].details = [...(updated[ruleI].details || []), { subtitle: '', text: '', extra: '', list: [] }];
@@ -1428,23 +1415,6 @@ const ContentTab = ({ showMessage }) => {
     return (
       <div className="space-y-6">
         <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">House Rules</h3>
-<<<<<<< HEAD
-        <p className="text-purple-300 text-sm">Each rule is shown as a card on the House Rules page, in the order listed here — use the number or arrows to reorder, then save. "Details" are optional expandable sub-sections (e.g. for longer rules like power supply).</p>
-        {rules.map((rule, i) => (
-          <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/20 space-y-3">
-            <div className="flex justify-between items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="text-purple-300 text-sm font-semibold">Rule</span>
-                <select value={i} onChange={e => moveRule(i, Number(e.target.value))}
-                  title="Change this rule's position"
-                  className="px-2 py-1 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none">
-                  {rules.map((_, n) => <option key={n} value={n} className="bg-slate-800">{n + 1}</option>)}
-                </select>
-                <button onClick={() => moveRule(i, i - 1)} disabled={i === 0} title="Move up"
-                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 disabled:cursor-not-allowed"><FiArrowUp size={14} /></button>
-                <button onClick={() => moveRule(i, i + 1)} disabled={i === rules.length - 1} title="Move down"
-                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 disabled:cursor-not-allowed"><FiArrowDown size={14} /></button>
-=======
         <p className="text-purple-300 text-sm">Each rule is shown as a card on the House Rules page, in this exact order. Drag a rule by its handle (or use the arrows) to reorder it. Removing a rule here removes it from the site after you save. "Details" are optional expandable sub-sections (e.g. for longer rules like power supply).</p>
         {rules.map((rule, i) => (
           <div key={i}
@@ -1472,7 +1442,6 @@ const ContentTab = ({ showMessage }) => {
                   className="p-1 rounded bg-white/10 hover:bg-white/20 text-white disabled:opacity-30">
                   <FiChevronDown size={14} />
                 </button>
->>>>>>> 44f8aeacd682d1ae790514e4be172aaa1b63071f
               </div>
               <button onClick={() => removeRule(i)} className="text-red-400 text-xs hover:text-red-300">Remove Rule</button>
             </div>
@@ -1664,78 +1633,6 @@ const ContentTab = ({ showMessage }) => {
           <FiSave /> {saving ? 'Saving...' : `Save ${heading}`}
         </button>
         <FloatingSave onClick={() => handleSave(storeKey, { items })} saving={saving} label={`Save ${heading}`} />
-      </div>
-    );
-  };
-
-  // Legal-policy editor — shared by Cancellation & Privacy. Both are just a list
-  // of cards, each with a title and one or more paragraphs. The card icon and
-  // colour are chosen by position on the public page, so the owner edits wording
-  // only and never has to think about styling.
-  const PolicyEditor = ({ storeKey, heading, help, defaults }) => {
-    const current = content[storeKey]?.value || {};
-    const [items, setItems] = useState(current.items?.length ? current.items : defaults);
-
-    const updateItem = (i, field, val) => {
-      const updated = [...items];
-      updated[i] = { ...updated[i], [field]: val };
-      setItems(updated);
-    };
-    const addItem = () => setItems([...items, { title: '', content: [''] }]);
-    const removeItem = (i) => setItems(items.filter((_, j) => j !== i));
-
-    const updatePara = (i, pi, val) => {
-      const updated = [...items];
-      const paras = [...(updated[i].content || [])];
-      paras[pi] = val;
-      updated[i] = { ...updated[i], content: paras };
-      setItems(updated);
-    };
-    const addPara = (i) => {
-      const updated = [...items];
-      updated[i] = { ...updated[i], content: [...(updated[i].content || []), ''] };
-      setItems(updated);
-    };
-    const removePara = (i, pi) => {
-      const updated = [...items];
-      updated[i] = { ...updated[i], content: (updated[i].content || []).filter((_, j) => j !== pi) };
-      setItems(updated);
-    };
-
-    return (
-      <div className="space-y-6">
-        <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">{heading}</h3>
-        <p className="text-purple-300 text-sm">{help}</p>
-        {items.map((item, i) => (
-          <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/20 space-y-3">
-            <div className="flex justify-between items-center gap-2">
-              <input value={item.title || ''} onChange={e => updateItem(i, 'title', e.target.value)}
-                placeholder="Section title"
-                className="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white font-semibold text-sm focus:outline-none" />
-              <button onClick={() => removeItem(i)} className="text-red-400 text-xs hover:text-red-300 shrink-0">Remove</button>
-            </div>
-            <div className="space-y-2 pl-3 border-l-2 border-amber-500/20">
-              {(item.content || []).map((para, pi) => (
-                <div key={pi} className="flex gap-2 items-start">
-                  <textarea value={para} rows={3} onChange={e => updatePara(i, pi, e.target.value)}
-                    placeholder={`Paragraph ${pi + 1}`}
-                    className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
-                  <button onClick={() => removePara(i, pi)} className="text-red-400 hover:text-red-300 mt-2" title="Remove paragraph"><FiX size={14} /></button>
-                </div>
-              ))}
-              <button onClick={() => addPara(i)} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
-                <FiPlus size={12} /> Add Paragraph
-              </button>
-            </div>
-          </div>
-        ))}
-        <button onClick={addItem} className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm">
-          <FiPlus /> Add Section
-        </button>
-        <button onClick={() => handleSave(storeKey, { items })} disabled={saving}
-          className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
-          <FiSave /> {saving ? 'Saving...' : `Save ${heading}`}
-        </button>
       </div>
     );
   };
