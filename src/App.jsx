@@ -4,7 +4,15 @@ import Home from './Pages/Home';
 import Hero from './Pages/Hero';
 import Login from './Pages/Login';
 
-export const backendUrl = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || 'http://localhost:4000';
+// Prefer an explicit build-time env var. Otherwise use localhost ONLY when the
+// app is actually running on localhost — any real domain uses the deployed
+// backend, so the hosted admin keeps working even if VITE_API_URL wasn't baked
+// into the production build.
+const isLocalhost = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(window.location.hostname);
+export const backendUrl =
+  import.meta.env.VITE_BACKEND_URL ||
+  import.meta.env.VITE_API_URL ||
+  (isLocalhost ? 'http://localhost:4000' : 'https://bookastay-backend-zuwa.onrender.com');
 
 function RequireAuth({ children }) {
   const token = sessionStorage.getItem('admin_token');

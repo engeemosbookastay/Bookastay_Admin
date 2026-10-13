@@ -3,15 +3,19 @@ import {
   FiCalendar, FiTrash2, FiUsers, FiHome, FiAlertCircle,
   FiCheckCircle, FiXCircle, FiPlus, FiRefreshCw, FiEdit2,
   FiTag, FiImage, FiFileText, FiDollarSign, FiToggleLeft, FiToggleRight,
-  FiSave, FiUpload, FiX, FiChevronLeft, FiChevronRight,
+  FiSave, FiUpload, FiX, FiChevronLeft, FiChevronRight, FiArrowUp, FiArrowDown,
   FiWifi, FiWind, FiMonitor, FiZap, FiShield, FiActivity,
   FiBriefcase, FiSun, FiDroplet, FiCoffee, FiMapPin, FiAnchor, FiSliders, FiBookOpen,
   FiLock, FiCamera, FiThermometer, FiUmbrella, FiTruck, FiHeart, FiPrinter, FiFilm, FiTv
 } from 'react-icons/fi';
 import { DEFAULT_GETTING_AROUND } from '../data/gettingAroundDefaults';
 import { DEFAULT_CAROUSEL } from '../data/carouselDefaults';
+import { DEFAULT_CANCELLATION, DEFAULT_PRIVACY } from '../data/policyDefaults';
 
-const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:4000') + '/api';
+// Use localhost only when actually running locally; the hosted admin always
+// talks to the deployed backend even if VITE_API_URL wasn't baked into the build.
+const isLocalhost = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(window.location.hostname);
+const API_URL = (import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || (isLocalhost ? 'http://localhost:4000' : 'https://bookastay-backend-zuwa.onrender.com')) + '/api';
 
 const authFetch = (url, opts = {}) => {
   const token = sessionStorage.getItem('admin_token');
@@ -755,9 +759,19 @@ const PropertiesTab = ({ showMessage }) => {
           {/* ── Image Uploader ── */}
           <div>
             <label className="block text-purple-200 text-sm mb-1">Property Images</label>
+
+            {/* When editing: the property's saved photos, reorderable right here */}
+            {liveProp && (liveProp.images || []).length > 0 && (
+              <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-xl">
+                <p className="text-purple-300 text-sm font-medium mb-2">Current photos ({(liveProp.images || []).length}) — arrange the order guests see</p>
+                {renderThumbs(liveProp)}
+              </div>
+            )}
+
             <p className="text-purple-400 text-xs mb-3">
-              Select one or more images — they upload in the order shown here, and the <span className="text-amber-400 font-semibold">first image</span> is the cover photo.
-              Use the arrows to arrange them, or hover an image and click <span className="text-amber-400 font-semibold">Set as Main</span> to jump it to the front.
+              {liveProp
+                ? <>Add more images below — new photos are added <span className="text-amber-400 font-semibold">after</span> your current ones, then you can arrange everything with the arrows above.</>
+                : <>Select one or more images — they upload in the order shown here, and the <span className="text-amber-400 font-semibold">first image</span> is the cover photo. Use the arrows to arrange them, or hover an image and click <span className="text-amber-400 font-semibold">Set as Main</span> to jump it to the front.</>}
             </p>
 
             {pendingImages.length > 0 && (
@@ -853,8 +867,8 @@ const PropertiesTab = ({ showMessage }) => {
 
       {loading && <div className="text-center text-purple-200">Loading...</div>}
 
-      {/* While editing one property, show only that property's card (hide the rest) */}
-      {properties.filter(p => !editing || p.room_key === editing).map(p => (
+      {/* The form is the single editing surface — hide the card list while editing */}
+      {properties.filter(() => !editing).map(p => (
         <div key={p.room_key} className={`bg-white/5 border rounded-xl p-5 ${p.is_active ? 'border-white/20' : 'border-red-500/30 opacity-60'}`}>
           <div className="flex justify-between items-start mb-4">
             <div>
@@ -891,44 +905,7 @@ const PropertiesTab = ({ showMessage }) => {
           {/* Images */}
           <div className="mt-3">
             <p className="text-purple-300 text-sm font-medium mb-1">Images ({(p.images || []).length})</p>
-            {(p.images || []).length > 1 && (
-              <p className="text-purple-400/70 text-xs mb-2">
-                Use the arrows to arrange the order guests see. The first photo is the <span className="text-amber-400 font-semibold">cover</span>. Removing one never disturbs the rest.
-              </p>
-            )}
-            <div className="flex flex-wrap gap-3 mb-3">
-              {(p.images || []).map((img, i) => (
-                <div key={img} className="relative group w-24">
-                  <div className="relative w-24 h-24">
-                    <img src={img} alt={`Property photo ${i + 1}`} className="w-24 h-24 object-cover rounded-lg border border-white/20" />
-                    {i === 0 && (
-                      <span className="absolute top-1 left-1 bg-amber-500 text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded shadow">Cover</span>
-                    )}
-                    <button onClick={() => handleRemoveImage(p.room_key, img)}
-                      className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Remove this image">
-                      <FiX size={10} />
-                    </button>
-                  </div>
-                  {/* Reorder controls — move this photo earlier/later without deleting */}
-                  {(p.images || []).length > 1 && (
-                    <div className="flex items-center justify-between mt-1 gap-1">
-                      <button onClick={() => moveImage(p.room_key, i, -1)} disabled={i === 0}
-                        className="flex-1 flex items-center justify-center py-1 bg-white/10 hover:bg-white/20 rounded text-purple-200 disabled:opacity-25 disabled:cursor-not-allowed"
-                        title="Move earlier">
-                        <FiChevronLeft size={14} />
-                      </button>
-                      <span className="text-[10px] text-purple-400 w-3 text-center">{i + 1}</span>
-                      <button onClick={() => moveImage(p.room_key, i, 1)} disabled={i === (p.images || []).length - 1}
-                        className="flex-1 flex items-center justify-center py-1 bg-white/10 hover:bg-white/20 rounded text-purple-200 disabled:opacity-25 disabled:cursor-not-allowed"
-                        title="Move later">
-                        <FiChevronRight size={14} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            {renderThumbs(p)}
             <div className="flex gap-2 items-center flex-wrap">
               <input type="file" accept="image/*" onChange={e => { const f = e.target.files[0]; if (f) setImageFile(prev => ({ ...prev, [p.room_key]: f })); }} className="text-sm text-purple-300" />
               {imageFile[p.room_key] && (
@@ -1301,6 +1278,15 @@ const ContentTab = ({ showMessage }) => {
     const addRule = () => setRules([...rules, { title: '', category: '', content: '', extra: '', details: [] }]);
     const removeRule = (i) => setRules(rules.filter((_, j) => j !== i));
 
+    // Move rule at index `from` to position `to` (0-based); the site shows rules in this order.
+    const moveRule = (from, to) => {
+      if (to < 0 || to >= rules.length || to === from) return;
+      const updated = [...rules];
+      const [moved] = updated.splice(from, 1);
+      updated.splice(to, 0, moved);
+      setRules(updated);
+    };
+
     const addDetail = (ruleI) => {
       const updated = [...rules];
       updated[ruleI].details = [...(updated[ruleI].details || []), { subtitle: '', text: '', extra: '', list: [] }];
@@ -1336,11 +1322,22 @@ const ContentTab = ({ showMessage }) => {
     return (
       <div className="space-y-6">
         <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">House Rules</h3>
-        <p className="text-purple-300 text-sm">Each rule is shown as a card on the House Rules page. "Details" are optional expandable sub-sections (e.g. for longer rules like power supply).</p>
+        <p className="text-purple-300 text-sm">Each rule is shown as a card on the House Rules page, in the order listed here — use the number or arrows to reorder, then save. "Details" are optional expandable sub-sections (e.g. for longer rules like power supply).</p>
         {rules.map((rule, i) => (
           <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/20 space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-purple-300 text-sm font-semibold">Rule {i + 1}</span>
+            <div className="flex justify-between items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-purple-300 text-sm font-semibold">Rule</span>
+                <select value={i} onChange={e => moveRule(i, Number(e.target.value))}
+                  title="Change this rule's position"
+                  className="px-2 py-1 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none">
+                  {rules.map((_, n) => <option key={n} value={n} className="bg-slate-800">{n + 1}</option>)}
+                </select>
+                <button onClick={() => moveRule(i, i - 1)} disabled={i === 0} title="Move up"
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 disabled:cursor-not-allowed"><FiArrowUp size={14} /></button>
+                <button onClick={() => moveRule(i, i + 1)} disabled={i === rules.length - 1} title="Move down"
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 disabled:cursor-not-allowed"><FiArrowDown size={14} /></button>
+              </div>
               <button onClick={() => removeRule(i)} className="text-red-400 text-xs hover:text-red-300">Remove Rule</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1401,6 +1398,78 @@ const ContentTab = ({ showMessage }) => {
         <button onClick={() => handleSave('house_rules', { rules })} disabled={saving}
           className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
           <FiSave /> {saving ? 'Saving...' : 'Save House Rules'}
+        </button>
+      </div>
+    );
+  };
+
+  // Legal-policy editor — shared by Cancellation & Privacy. Both are just a list
+  // of cards, each with a title and one or more paragraphs. The card icon and
+  // colour are chosen by position on the public page, so the owner edits wording
+  // only and never has to think about styling.
+  const PolicyEditor = ({ storeKey, heading, help, defaults }) => {
+    const current = content[storeKey]?.value || {};
+    const [items, setItems] = useState(current.items?.length ? current.items : defaults);
+
+    const updateItem = (i, field, val) => {
+      const updated = [...items];
+      updated[i] = { ...updated[i], [field]: val };
+      setItems(updated);
+    };
+    const addItem = () => setItems([...items, { title: '', content: [''] }]);
+    const removeItem = (i) => setItems(items.filter((_, j) => j !== i));
+
+    const updatePara = (i, pi, val) => {
+      const updated = [...items];
+      const paras = [...(updated[i].content || [])];
+      paras[pi] = val;
+      updated[i] = { ...updated[i], content: paras };
+      setItems(updated);
+    };
+    const addPara = (i) => {
+      const updated = [...items];
+      updated[i] = { ...updated[i], content: [...(updated[i].content || []), ''] };
+      setItems(updated);
+    };
+    const removePara = (i, pi) => {
+      const updated = [...items];
+      updated[i] = { ...updated[i], content: (updated[i].content || []).filter((_, j) => j !== pi) };
+      setItems(updated);
+    };
+
+    return (
+      <div className="space-y-6">
+        <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">{heading}</h3>
+        <p className="text-purple-300 text-sm">{help}</p>
+        {items.map((item, i) => (
+          <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/20 space-y-3">
+            <div className="flex justify-between items-center gap-2">
+              <input value={item.title || ''} onChange={e => updateItem(i, 'title', e.target.value)}
+                placeholder="Section title"
+                className="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white font-semibold text-sm focus:outline-none" />
+              <button onClick={() => removeItem(i)} className="text-red-400 text-xs hover:text-red-300 shrink-0">Remove</button>
+            </div>
+            <div className="space-y-2 pl-3 border-l-2 border-amber-500/20">
+              {(item.content || []).map((para, pi) => (
+                <div key={pi} className="flex gap-2 items-start">
+                  <textarea value={para} rows={3} onChange={e => updatePara(i, pi, e.target.value)}
+                    placeholder={`Paragraph ${pi + 1}`}
+                    className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none" />
+                  <button onClick={() => removePara(i, pi)} className="text-red-400 hover:text-red-300 mt-2" title="Remove paragraph"><FiX size={14} /></button>
+                </div>
+              ))}
+              <button onClick={() => addPara(i)} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                <FiPlus size={12} /> Add Paragraph
+              </button>
+            </div>
+          </div>
+        ))}
+        <button onClick={addItem} className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm">
+          <FiPlus /> Add Section
+        </button>
+        <button onClick={() => handleSave(storeKey, { items })} disabled={saving}
+          className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
+          <FiSave /> {saving ? 'Saving...' : `Save ${heading}`}
         </button>
       </div>
     );
@@ -1626,6 +1695,8 @@ const ContentTab = ({ showMessage }) => {
     { key: 'footer', label: 'Footer' },
     { key: 'comparison', label: 'Comparison' },
     { key: 'home_hero', label: 'Carousel' },
+    { key: 'cancellation_policy', label: 'Cancellation Policy' },
+    { key: 'privacy_policy', label: 'Privacy Policy' },
   ];
 
   return (
@@ -1649,6 +1720,14 @@ const ContentTab = ({ showMessage }) => {
           {activeSection === 'footer' && <FooterEditor />}
           {activeSection === 'comparison' && <ComparisonEditor />}
           {activeSection === 'home_hero' && <CarouselEditor />}
+          {activeSection === 'cancellation_policy' && (
+            <PolicyEditor storeKey="cancellation_policy" heading="Cancellation Policy" defaults={DEFAULT_CANCELLATION}
+              help="Each section is a card on the Cancellation Policy page. Edit the title and paragraphs; the icon and colour are set automatically by position." />
+          )}
+          {activeSection === 'privacy_policy' && (
+            <PolicyEditor storeKey="privacy_policy" heading="Privacy Policy" defaults={DEFAULT_PRIVACY}
+              help="Each section is a card on the Privacy Policy page. Edit the title and paragraphs; the icon is set automatically by position." />
+          )}
         </>
       )}
     </div>
