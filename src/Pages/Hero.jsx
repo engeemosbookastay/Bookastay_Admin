@@ -123,9 +123,28 @@ const Alert = ({ message, type }) => {
 // ─── TAB: Block Dates ─────────────────────────────────────────────
 const BlockDatesTab = ({ showMessage }) => {
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ room_type: 'entire', check_in_date: '', check_out_date: '', reason: '' });
+  const [form, setForm] = useState({ room_type: '', check_in_date: '', check_out_date: '', reason: '' });
+  // The real apartments (room keys) — blocking must use the same key the website checks.
+  const [rooms, setRooms] = useState([]);
+
+  useEffect(() => {
+    authFetch(`${API_URL}/admin/properties`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.success) return;
+        const list = (d.properties || []).map(p => ({ value: p.room_key, label: p.name || p.room_key }));
+        setRooms(list);
+        setForm(f => (f.room_type || !list.length ? f : { ...f, room_type: list[0].value }));
+      })
+      .catch(() => showMessage('error', 'Failed to load apartments'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleBlock = async () => {
+    if (!form.room_type) {
+      showMessage('error', 'Select an apartment');
+      return;
+    }
     if (!form.check_in_date || !form.check_out_date) {
       showMessage('error', 'Select check-in and check-out dates');
       return;
@@ -138,7 +157,7 @@ const BlockDatesTab = ({ showMessage }) => {
       const d = await res.json();
       if (d.success) {
         showMessage('success', 'Date blocked!');
-        setForm({ room_type: 'entire', check_in_date: '', check_out_date: '', reason: '' });
+        setForm(f => ({ ...f, check_in_date: '', check_out_date: '', reason: '' }));
       } else {
         showMessage('error', d.message || 'Failed to block date');
       }
@@ -150,10 +169,7 @@ const BlockDatesTab = ({ showMessage }) => {
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {[
-          { label: 'Room Type', field: 'room_type', type: 'select', options: [
-            { value: 'entire', label: 'Entire Apartment' },
-            { value: 'room1', label: 'Room 1' },
-          ]},
+          { label: 'Apartment', field: 'room_type', type: 'select', options: rooms },
           { label: 'Check-in Date', field: 'check_in_date', type: 'date' },
           { label: 'Check-out Date', field: 'check_out_date', type: 'date' },
           { label: 'Reason (Optional)', field: 'reason', type: 'text', placeholder: 'e.g., Maintenance' },
