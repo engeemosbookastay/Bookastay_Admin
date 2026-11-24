@@ -11,6 +11,7 @@ import {
 } from 'react-icons/fi';
 import { DEFAULT_GETTING_AROUND } from '../data/gettingAroundDefaults';
 import AdminTour, { shouldAutoStartTour, tourRequest, useTourRequest } from './AdminTour';
+import { sizedImage } from '../utils/imageUrl';
 import { DEFAULT_CANCELLATION, DEFAULT_PRIVACY } from '../data/policyDefaults';
 
 // Use localhost only when actually running locally; the hosted admin always
@@ -645,7 +646,7 @@ const PropertiesTab = ({ showMessage }) => {
           {imgs.map((img, i) => (
             <div key={img} className="relative group w-24">
               <div className="relative w-24 h-24">
-                <img src={img} alt={`Property photo ${i + 1}`} className="w-24 h-24 object-cover rounded-lg border border-white/20" />
+                <img src={sizedImage(img, 300)} alt={`Property photo ${i + 1}`} className="w-24 h-24 object-cover rounded-lg border border-white/20" />
                 {i === 0 && (
                   <span className="absolute top-1 left-1 bg-amber-500 text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded shadow">Cover</span>
                 )}
@@ -713,7 +714,7 @@ const PropertiesTab = ({ showMessage }) => {
       )}
 
       {(editing || showAddForm) && (
-        <div className="bg-white/5 border border-white/20 rounded-xl p-6 space-y-4">
+        <div className="bg-white/5 border border-white/20 rounded-xl p-4 sm:p-6 space-y-4">
           <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">{editing ? 'Edit Property' : 'Add New Property'}</h3>
 
           {/* ── STEP 1: Set up this listing (defines availability grouping) ── */}
@@ -943,10 +944,10 @@ const PropertiesTab = ({ showMessage }) => {
 
       {/* The form is the single editing surface — hide the card list while editing */}
       {properties.filter(() => !editing).map(p => (
-        <div key={p.room_key} data-tour="property-card" className={`bg-white/5 border rounded-xl p-5 ${p.is_active ? 'border-white/20' : 'border-red-500/30 opacity-60'}`}>
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <div className="flex items-center gap-3">
+        <div key={p.room_key} data-tour="property-card" className={`bg-white/5 border rounded-xl p-4 sm:p-5 ${p.is_active ? 'border-white/20' : 'border-red-500/30 opacity-60'}`}>
+          <div className="flex flex-col sm:flex-row justify-between items-start gap-3 mb-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="text-white font-bold text-lg">{p.name}</span>
                 <span className={`px-2 py-0.5 rounded-full text-xs ${p.is_active ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
                   {p.is_active ? 'Active' : 'Inactive'}
@@ -1107,7 +1108,7 @@ const DiscountsTab = ({ showMessage }) => {
       </button>
 
       {showForm && (
-        <div className="bg-white/5 border border-white/20 rounded-xl p-6 space-y-4">
+        <div className="bg-white/5 border border-white/20 rounded-xl p-4 sm:p-6 space-y-4">
           <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">{editingId ? 'Edit Discount Code' : 'Create Discount Code'}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
@@ -2089,7 +2090,7 @@ const ContentTab = ({ showMessage }) => {
               </div>
             </div>
             {slide.url
-              ? <img src={slide.url} alt="" className="w-full h-40 object-cover rounded-lg" />
+              ? <img src={sizedImage(slide.url, 800)} alt="" className="w-full h-40 object-cover rounded-lg" />
               : <div className="w-full h-40 bg-white/5 rounded-lg flex flex-col items-center justify-center text-purple-300 text-sm gap-1">
                   <span>No image yet</span>
                   <span className="text-amber-300/80 text-xs px-4 text-center">No photo — this slide is NOT shown on the homepage until you upload one (JPG/PNG/WEBP, max {MAX_IMAGE_MB}MB).</span>
@@ -2292,7 +2293,7 @@ const BlogTab = ({ showMessage }) => {
       </button>
 
       {showForm && (
-        <div className="bg-white/5 border border-white/20 rounded-xl p-6 space-y-4">
+        <div className="bg-white/5 border border-white/20 rounded-xl p-4 sm:p-6 space-y-4">
           <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">{editingId ? 'Edit Post' : 'Create Post'}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {fields.map(({ label, field, type, placeholder }) => (
@@ -2316,7 +2317,7 @@ const BlogTab = ({ showMessage }) => {
           </div>
           <div>
             <label className="block text-purple-200 text-sm mb-1">Cover Image</label>
-            {form.image && <img src={form.image} alt="Cover" className="w-40 h-24 object-cover rounded-lg mb-2 border border-white/20" />}
+            {form.image && <img src={sizedImage(form.image, 400)} alt="Cover" className="w-40 h-24 object-cover rounded-lg mb-2 border border-white/20" />}
             <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files[0])}
               className="text-purple-200 text-sm" />
           </div>
@@ -2413,13 +2414,13 @@ const Hero = ({ onLogout }) => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-2 sm:p-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6 border border-white/20">
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 border border-white/20">
           <div className="flex justify-between items-start gap-4 flex-wrap mb-2">
             <div>
-              <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">BookAStay Admin</h1>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">BookAStay Admin</h1>
               <p className="text-purple-200 mt-1">Logged in as <span className="text-white font-semibold">{adminName}</span></p>
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -2434,14 +2435,14 @@ const Hero = ({ onLogout }) => {
             </div>
           </div>
           <p className="text-purple-300 text-sm">Manage bookings, properties, discounts, and content</p>
-          <div className="grid grid-cols-3 gap-4 mt-4">
+          <div className="grid grid-cols-3 gap-2 sm:gap-4 mt-4">
             {[
               { label: 'Total Bookings', value: stats.total, color: 'text-blue-300' },
               { label: 'Confirmed (Paid)', value: stats.confirmed, color: 'text-green-300' },
               { label: 'Pending', value: stats.pending, color: 'text-yellow-300' },
             ].map(s => (
-              <div key={s.label} className="bg-white/5 rounded-xl p-4 border border-white/10">
-                <p className="text-purple-200 text-sm">{s.label}</p>
+              <div key={s.label} className="bg-white/5 rounded-xl p-3 sm:p-4 border border-white/10">
+                <p className="text-purple-200 text-xs sm:text-sm">{s.label}</p>
                 <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
               </div>
             ))}
@@ -2465,7 +2466,7 @@ const Hero = ({ onLogout }) => {
               </button>
             ))}
           </div>
-          <div className="p-6">
+          <div className="p-3 sm:p-6">
             {activeTab === 'bookings' && <BookingsTab showMessage={showMessage} />}
             {activeTab === 'block' && <BlockDatesTab showMessage={showMessage} />}
             {activeTab === 'properties' && <PropertiesTab showMessage={showMessage} />}
