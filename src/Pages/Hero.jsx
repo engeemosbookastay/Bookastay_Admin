@@ -7,10 +7,10 @@ import {
   FiSave, FiUpload, FiX, FiChevronLeft, FiChevronRight, FiChevronUp, FiChevronDown, FiMove,
   FiWifi, FiWind, FiMonitor, FiZap, FiShield, FiActivity,
   FiBriefcase, FiSun, FiDroplet, FiCoffee, FiMapPin, FiAnchor, FiSliders, FiBookOpen,
-  FiLock, FiCamera, FiThermometer, FiUmbrella, FiTruck, FiHeart, FiPrinter, FiFilm, FiTv
+  FiLock, FiCamera, FiCompass, FiThermometer, FiUmbrella, FiTruck, FiHeart, FiPrinter, FiFilm, FiTv
 } from 'react-icons/fi';
 import { DEFAULT_GETTING_AROUND } from '../data/gettingAroundDefaults';
-import { DEFAULT_CAROUSEL } from '../data/carouselDefaults';
+import AdminTour, { shouldAutoStartTour, tourRequest, useTourRequest } from './AdminTour';
 import { DEFAULT_CANCELLATION, DEFAULT_PRIVACY } from '../data/policyDefaults';
 
 // Use localhost only when actually running locally; the hosted admin always
@@ -103,6 +103,25 @@ const AmenitiesPicker = ({ selected = [], onChange }) => {
       ))}
     </div>
   );
+};
+
+// ─── Carousel photo checks ────────────────────────────────────────
+// The server accepts images up to 10MB. Check before uploading so the admin is
+// told exactly what is wrong instead of a generic failure.
+const MAX_IMAGE_MB = 10;
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const checkCarouselImage = (file) => {
+  if (!file) return 'No file selected.';
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    const ext = (file.name.split('.').pop() || '').toUpperCase();
+    return `"${file.name}" is a ${ext || 'unsupported'} file. Please use a JPG, PNG or WEBP photo` +
+      (/HEIC|HEIF/.test(ext) ? ' (iPhone HEIC photos don\u2019t display on websites — on the iPhone set Camera → Formats → Most Compatible, or export the photo as JPG).' : '.');
+  }
+  const mb = file.size / (1024 * 1024);
+  if (mb > MAX_IMAGE_MB) {
+    return `"${file.name}" is ${mb.toFixed(1)}MB — the limit is ${MAX_IMAGE_MB}MB. Please resize or compress the photo (e.g. with WhatsApp, or tinypng.com) and upload again.`;
+  }
+  return null;
 };
 
 // ─── Reusable alert ───────────────────────────────────────────────
@@ -364,6 +383,24 @@ const PropertiesTab = ({ showMessage }) => {
 
   const cancelEdit = () => { setEditing(null); setForm({}); setPendingImages([]); setUploadProgress(''); resetSetup(); };
 
+  // "What's new" tour: open the apartment that takes the most guests (where
+  // extra-guest pricing matters), and close it again if the tour moves back.
+  const [tourWantsEdit, setTourWantsEdit] = useState(false);
+  const openedByTour = useRef(false);
+  useTourRequest(({ openProperty }) => {
+    if (openProperty) setTourWantsEdit(true);
+    else if (openedByTour.current) { openedByTour.current = false; cancelEdit(); }
+  });
+  useEffect(() => {
+    if (!tourWantsEdit || !properties.length) return;
+    setTourWantsEdit(false);
+    if (editing) return;
+    const pick = properties.reduce((a, b) => (Number(b.max_guests) > Number(a.max_guests) ? b : a));
+    openedByTour.current = true;
+    startEdit(pick);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourWantsEdit, properties]);
+
   const handlePendingImageSelect = (e) => {
     const files = Array.from(e.target.files);
     setPendingImages(prev => [...prev, ...files]);
@@ -453,6 +490,8 @@ const PropertiesTab = ({ showMessage }) => {
           setPendingImages([]);
           if (failed) showMessage('error', `Saved, but image upload failed: ${failed}`);
           else showMessage('success', isNew ? 'Property created with images!' : 'Property updated — images added!');
+        } else if (d.message && /NOT saved/.test(d.message)) {
+          showMessage('error', d.message); // saved, but a setting needs a database update first
         } else {
           showMessage('success', isNew ? 'Property created!' : 'Property updated!');
         }
@@ -565,6 +604,10 @@ const PropertiesTab = ({ showMessage }) => {
     { label: 'Category', field: 'category' },
     { label: 'Base Price (₦/night)', field: 'base_price', type: 'number' },
     { label: 'Max Guests', field: 'max_guests', type: 'number' },
+    { label: 'Guests included in base price', field: 'included_guests', type: 'number',
+      hint: 'Extra charge starts after this many guests. 2 = the 3rd and 4th guest pay extra; 3 = only the 4th guest pays extra.' },
+    { label: 'Extra charge per extra guest (₦/night)', field: 'extra_guest_fee', type: 'number',
+      hint: 'Added per night for each guest above the included number, up to Max Guests. 0 or empty = no extra charge. Only affects new bookings — guests who already paid are never charged again.' },
     { label: 'Min Nights', field: 'min_nights', type: 'number' },
     { label: 'Bathrooms', field: 'bathrooms', type: 'number' },
     { label: 'Sort Order', field: 'sort_order', type: 'number' },
@@ -688,7 +731,7 @@ const PropertiesTab = ({ showMessage }) => {
                 className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
                 <option value="__standalone__" className="bg-slate-800 text-white">Standalone — rented as one whole unit only</option>
                 {apartments.map(a => <option key={a} value={a} className="bg-slate-800 text-white">{a}</option>)}
-                <option value="__new__" className="bg-slate-800 text-white">➕ Add a new apartment…</option>
+                <option value="__new__" className="bg-slate-800 text-white">+ Add a new apartment…</option>
               </select>
             </div>
 
@@ -750,14 +793,28 @@ const PropertiesTab = ({ showMessage }) => {
           {/* ── STEP 2: Details & pricing ── */}
           <p className="text-white font-semibold text-sm pt-1">2. Details &amp; pricing</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {fields.map(({ label, field, type, disabled }) => (
-              <div key={field}>
+            {fields.map(({ label, field, type, disabled, hint }) => (
+              <div key={field} data-tour={`field-${field}`}>
                 <label className="block text-purple-200 text-sm mb-1">{label}</label>
-                <input type={type || 'text'} value={form[field] || ''} disabled={disabled}
+                <input type={type || 'text'} value={form[field] ?? ''} disabled={disabled}
+                  min={type === 'number' ? 0 : undefined}
                   onChange={e => setForm({ ...form, [field]: e.target.value })}
                   className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                {hint && <p className="text-purple-300/70 text-xs mt-1">{hint}</p>}
               </div>
             ))}
+            {Number(form.extra_guest_fee) > 0 && Number(form.base_price) > 0 && Number(form.max_guests) > (Number(form.included_guests) || 2) && (
+              <div data-tour="guest-price-preview" className="md:col-span-2 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-sm text-amber-100">
+                <p className="font-semibold text-amber-300 mb-1">What guests will see per night</p>
+                {Array.from({ length: Number(form.max_guests) }, (_, i) => i + 1)
+                  .filter(n => n >= Math.min(Number(form.included_guests) || 2, Number(form.max_guests)))
+                  .map(n => (
+                    <p key={n}>
+                      {n} guest{n > 1 ? 's' : ''}: ₦{(Number(form.base_price) + Math.max(0, n - (Number(form.included_guests) || 2)) * Number(form.extra_guest_fee)).toLocaleString()}
+                    </p>
+                  ))}
+              </div>
+            )}
             {(isStandalone || listingType === 'room') && (
               <div>
                 <label className="block text-purple-200 text-sm mb-1">{isStandalone ? 'Bedrooms' : 'Bedrooms in this room'}</label>
@@ -886,7 +943,7 @@ const PropertiesTab = ({ showMessage }) => {
 
       {/* The form is the single editing surface — hide the card list while editing */}
       {properties.filter(() => !editing).map(p => (
-        <div key={p.room_key} className={`bg-white/5 border rounded-xl p-5 ${p.is_active ? 'border-white/20' : 'border-red-500/30 opacity-60'}`}>
+        <div key={p.room_key} data-tour="property-card" className={`bg-white/5 border rounded-xl p-5 ${p.is_active ? 'border-white/20' : 'border-red-500/30 opacity-60'}`}>
           <div className="flex justify-between items-start mb-4">
             <div>
               <div className="flex items-center gap-3">
@@ -899,6 +956,9 @@ const PropertiesTab = ({ showMessage }) => {
                 <span className="mr-4">Key: <code className="text-amber-400">{p.room_key}</code></span>
                 <span className="mr-4">₦{Number(p.base_price).toLocaleString()}/night</span>
                 <span className="mr-4">Max: {p.max_guests} guests</span>
+                {Number(p.extra_guest_fee) > 0 && (
+                  <span className="mr-4">+₦{Number(p.extra_guest_fee).toLocaleString()}/extra guest (above {Number(p.included_guests) || 2})</span>
+                )}
                 <span>Min: {p.min_nights} night(s)</span>
               </div>
             </div>
@@ -920,7 +980,7 @@ const PropertiesTab = ({ showMessage }) => {
           </div>
 
           {/* Images */}
-          <div className="mt-3">
+          <div className="mt-3" data-tour="property-images">
             <p className="text-purple-300 text-sm font-medium mb-1">Images ({(p.images || []).length})</p>
             {renderThumbs(p)}
             <div className="flex gap-2 items-center flex-wrap">
@@ -1160,8 +1220,16 @@ const FloatingSave = ({ onClick, saving, label }) => createPortal(
   document.body
 );
 
+// Getting Around page text defaults (match the public page until saved)
+const GETTING_AROUND_DEFAULT_INTRO = [
+  "For guests arriving on the train, the apartment is 27-28 minutes' drive from Professor Wole Soyinka Train Station.",
+  'Carefully curated below is a list of important places and things that guests may want to visit or do during their stay...',
+];
+const GETTING_AROUND_DEFAULT_NOTE = 'There are small stalls along Sekoni Street within walking distance from the apartment where guests can make urgent shopping for things like pepper, vegetable, beverages, etc.';
+
 const ContentTab = ({ showMessage }) => {
   const [activeSection, setActiveSection] = useState('about');
+  useTourRequest(({ section }) => { if (section) setActiveSection(section); });
   const [content, setContent] = useState({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1240,6 +1308,16 @@ const ContentTab = ({ showMessage }) => {
     const [categories, setCategories] = useState(
       Array.isArray(current.categories) && content.getting_around ? current.categories : DEFAULT_GETTING_AROUND
     );
+    // Page text above and below the lists (paragraphs separated by a blank line).
+    const [intro, setIntro] = useState(
+      Array.isArray(current.intro) ? current.intro.join('\n\n') : GETTING_AROUND_DEFAULT_INTRO.join('\n\n')
+    );
+    const [note, setNote] = useState(typeof current.note === 'string' ? current.note : GETTING_AROUND_DEFAULT_NOTE);
+    const gaValue = () => ({
+      categories,
+      intro: intro.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean),
+      note: note.trim(),
+    });
 
     const updateCategory = (i, field, val) => {
       const updated = [...categories];
@@ -1268,6 +1346,19 @@ const ContentTab = ({ showMessage }) => {
     return (
       <div className="space-y-6">
         <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">Getting Around Content</h3>
+        <div data-tour="ga-intro" className="bg-white/5 rounded-xl p-4 border border-white/20 space-y-3">
+          <div>
+            <label className="text-purple-300 text-sm font-semibold">Intro text (top of the page)</label>
+            <textarea rows={4} value={intro} onChange={e => setIntro(e.target.value)}
+              className="w-full mt-1 px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none" />
+            <p className="text-purple-300/70 text-xs mt-1">Leave a blank line between paragraphs. The address, map and Google reviews are under <strong>Location &amp; Reviews</strong>.</p>
+          </div>
+          <div>
+            <label className="text-purple-300 text-sm font-semibold">Note (bottom of the page)</label>
+            <textarea rows={2} value={note} onChange={e => setNote(e.target.value)} placeholder="Leave empty to hide the note"
+              className="w-full mt-1 px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none" />
+          </div>
+        </div>
         {categories.map((cat, catI) => (
           <div key={catI} className="bg-white/5 rounded-xl p-4 border border-white/20">
             <input value={cat.title} onChange={e => updateCategory(catI, 'title', e.target.value)}
@@ -1291,11 +1382,11 @@ const ContentTab = ({ showMessage }) => {
             </button>
           </div>
         ))}
-        <button onClick={() => handleSave('getting_around', { categories })} disabled={saving}
+        <button onClick={() => handleSave('getting_around', gaValue())} disabled={saving}
           className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
           <FiSave /> {saving ? 'Saving...' : 'Save Getting Around Content'}
         </button>
-        <FloatingSave onClick={() => handleSave('getting_around', { categories })} saving={saving} label={'Save Getting Around Content'} />
+        <FloatingSave onClick={() => handleSave('getting_around', gaValue())} saving={saving} label={'Save Getting Around Content'} />
       </div>
     );
   };
@@ -1653,6 +1744,169 @@ const ContentTab = ({ showMessage }) => {
     );
   };
 
+  // Location & Google reviews (Getting Around page)
+  const LocationEditor = () => {
+    const DEFAULT_ADDRESS = 'No. 5 Adesola Babarinde Close, Prof. Adewunmi Abioye Avenue, off Professor, Abeokuta 111105, Ogun State, Nigeria';
+    const current = content.location?.value || {};
+    const [loc, setLoc] = useState({
+      address: current.address || DEFAULT_ADDRESS,
+      map_query: current.map_query || '',
+      rating: current.rating ?? '',
+      review_count: current.review_count ?? '',
+      reviews_url: current.reviews_url || '',
+    });
+    const set = (k, v) => setLoc(prev => ({ ...prev, [k]: v }));
+    const rating = Number(loc.rating);
+    const ratingInvalid = loc.rating !== '' && !(rating > 0 && rating <= 5);
+    const urlInvalid = loc.reviews_url && !/^https?:\/\//i.test(loc.reviews_url.trim());
+    const mapQuery = (loc.map_query || loc.address).trim();
+    const input = 'w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none';
+
+    const save = () => {
+      if (ratingInvalid) return showMessage('error', 'Rating must be a number between 0.1 and 5 (e.g. 4.8).');
+      if (urlInvalid) return showMessage('error', 'The Google reviews link must start with https://');
+      handleSave('location', {
+        address: loc.address.trim(),
+        map_query: loc.map_query.trim(),
+        rating: loc.rating === '' ? '' : rating,
+        review_count: loc.review_count === '' ? '' : Math.max(0, Math.round(Number(loc.review_count) || 0)),
+        reviews_url: loc.reviews_url.trim(),
+      });
+    };
+
+    return (
+      <div className="space-y-4">
+        <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">Location &amp; Google Reviews</h3>
+        <p className="text-purple-300 text-sm">Shown at the top of the Getting Around page: the full address, a map, directions, and your Google rating with a link to your reviews.</p>
+
+        <div>
+          <label className="text-purple-300 text-sm">Full address</label>
+          <textarea rows={2} value={loc.address} onChange={e => set('address', e.target.value)} className={input} />
+        </div>
+        <div>
+          <label className="text-purple-300 text-sm">Map search (optional)</label>
+          <input value={loc.map_query} onChange={e => set('map_query', e.target.value)} className={input}
+            placeholder="e.g. Engeemos Bookastay, Abeokuta — leave empty to use the address" />
+          <p className="text-purple-300/70 text-xs mt-1">If the map pin isn't exactly on the property, type the business name as it appears on Google Maps, or the coordinates (e.g. 7.1557, 3.3451).</p>
+        </div>
+        <div className="rounded-lg overflow-hidden border border-white/10 h-56">
+          <iframe title="Map preview" src={`https://maps.google.com/maps?q=${encodeURIComponent(mapQuery)}&t=m&z=16&output=embed`}
+            width="100%" height="100%" style={{ border: 0 }} loading="lazy" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="text-purple-300 text-sm">Google rating (out of 5)</label>
+            <input type="number" step="0.1" min="0" max="5" value={loc.rating} onChange={e => set('rating', e.target.value)} className={input} placeholder="e.g. 4.9" />
+            {ratingInvalid && <p className="text-red-300 text-xs mt-1">Enter a number between 0.1 and 5.</p>}
+          </div>
+          <div>
+            <label className="text-purple-300 text-sm">Number of reviews</label>
+            <input type="number" min="0" value={loc.review_count} onChange={e => set('review_count', e.target.value)} className={input} placeholder="e.g. 37" />
+          </div>
+          <div>
+            <label className="text-purple-300 text-sm">Google reviews link</label>
+            <input value={loc.reviews_url} onChange={e => set('reviews_url', e.target.value)} className={input} placeholder="https://g.page/r/..." />
+            {urlInvalid && <p className="text-red-300 text-xs mt-1">Must start with https://</p>}
+          </div>
+        </div>
+        <p className="text-purple-300/70 text-xs">To get the link: open Google Maps, search your business, tap <strong>Share</strong> → <strong>Copy link</strong>. Update the rating and number of reviews here whenever they change on Google. The reviews box stays hidden until a rating or link is entered.</p>
+
+        <button onClick={save} disabled={saving}
+          className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
+          <FiSave /> {saving ? 'Saving...' : 'Save Location & Reviews'}
+        </button>
+      </div>
+    );
+  };
+
+  // Booking settings — automatic long-stay discounts (booking page + homepage)
+  const BookingSettingsEditor = () => {
+    const DEFAULTS = { weekly_enabled: true, weekly_min_nights: 7, weekly_percent: 10, monthly_enabled: true, monthly_min_nights: 30, monthly_percent: 15 };
+    const [s, setS] = useState({ ...DEFAULTS, ...(content.booking_settings?.value || {}) });
+    const set = (k, v) => setS(prev => ({ ...prev, [k]: v }));
+    const input = 'w-24 px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none';
+
+    const save = () => {
+      const tiers = ['weekly', 'monthly'];
+      for (const t of tiers) {
+        if (!s[`${t}_enabled`]) continue;
+        const n = Number(s[`${t}_min_nights`]), p = Number(s[`${t}_percent`]);
+        if (!(n >= 1)) return showMessage('error', `${t === 'weekly' ? 'Weekly' : 'Monthly'} discount: minimum nights must be at least 1.`);
+        if (!(p > 0 && p < 100)) return showMessage('error', `${t === 'weekly' ? 'Weekly' : 'Monthly'} discount: percentage must be between 1 and 99.`);
+      }
+      if (s.weekly_enabled && s.monthly_enabled && Number(s.monthly_min_nights) <= Number(s.weekly_min_nights)) {
+        return showMessage('error', 'The monthly discount should need more nights than the weekly one.');
+      }
+      handleSave('booking_settings', {
+        weekly_enabled: !!s.weekly_enabled, weekly_min_nights: Number(s.weekly_min_nights), weekly_percent: Number(s.weekly_percent),
+        monthly_enabled: !!s.monthly_enabled, monthly_min_nights: Number(s.monthly_min_nights), monthly_percent: Number(s.monthly_percent),
+      });
+    };
+
+    const Tier = ({ k, title }) => (
+      <div className="bg-white/5 rounded-xl p-4 border border-white/20 space-y-3">
+        <label className="flex items-center gap-2 text-white font-semibold cursor-pointer">
+          <input type="checkbox" checked={!!s[`${k}_enabled`]} onChange={e => set(`${k}_enabled`, e.target.checked)} className="w-4 h-4" />
+          {title}
+        </label>
+        <div className={`flex flex-wrap items-center gap-2 text-purple-200 text-sm ${s[`${k}_enabled`] ? '' : 'opacity-40 pointer-events-none'}`}>
+          <input type="number" min="1" max="99" value={s[`${k}_percent`]} onChange={e => set(`${k}_percent`, e.target.value)} className={input} />
+          <span>% off for stays of</span>
+          <input type="number" min="1" value={s[`${k}_min_nights`]} onChange={e => set(`${k}_min_nights`, e.target.value)} className={input} />
+          <span>nights or more</span>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="space-y-4">
+        <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">Booking Settings — Long-stay Discounts</h3>
+        <p className="text-purple-300 text-sm">Applied automatically on the booking page (no code needed) and shown on the homepage. The bigger discount wins when a stay qualifies for both. Untick both to turn long-stay discounts off.</p>
+        {Tier({ k: 'weekly', title: 'Weekly discount' })}
+        {Tier({ k: 'monthly', title: 'Monthly discount' })}
+        <p className="text-purple-300/70 text-xs">Extra-guest charges are set per apartment under <strong>Properties</strong>. Discount codes are under <strong>Discount Codes</strong>.</p>
+        <button onClick={save} disabled={saving}
+          className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
+          <FiSave /> {saving ? 'Saving...' : 'Save Booking Settings'}
+        </button>
+      </div>
+    );
+  };
+
+  // Rooms page heading
+  const RoomsPageEditor = () => {
+    const DEFAULTS = {
+      badge: 'Engeemos Bookastay Apartments, Abeokuta',
+      heading: 'Our Suites & Rooms',
+      subtitle: 'Choose your perfect stay. All rooms include premium amenities and the warmth of home.',
+    };
+    const [p, setP] = useState({ ...DEFAULTS, ...(content.rooms_page?.value || {}) });
+    const input = 'w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none';
+    return (
+      <div className="space-y-4">
+        <h3 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">Rooms Page</h3>
+        <p className="text-purple-300 text-sm">The heading at the top of the Rooms page. The apartment cards themselves (names, prices, photos) come from <strong>Properties</strong>.</p>
+        <div>
+          <label className="text-purple-300 text-sm">Small label above the heading (empty to hide)</label>
+          <input value={p.badge} onChange={e => setP({ ...p, badge: e.target.value })} className={input} />
+        </div>
+        <div>
+          <label className="text-purple-300 text-sm">Heading</label>
+          <input value={p.heading} onChange={e => setP({ ...p, heading: e.target.value })} className={input} />
+        </div>
+        <div>
+          <label className="text-purple-300 text-sm">Intro text (empty to hide)</label>
+          <textarea rows={2} value={p.subtitle} onChange={e => setP({ ...p, subtitle: e.target.value })} className={input} />
+        </div>
+        <button onClick={() => handleSave('rooms_page', { badge: p.badge.trim(), heading: p.heading.trim() || DEFAULTS.heading, subtitle: p.subtitle.trim() })} disabled={saving}
+          className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50">
+          <FiSave /> {saving ? 'Saving...' : 'Save Rooms Page'}
+        </button>
+      </div>
+    );
+  };
+
   // Footer editor
   const FooterEditor = () => {
     const current = content.footer?.value || {};
@@ -1780,17 +2034,22 @@ const ContentTab = ({ showMessage }) => {
 
     const uploadImage = async (i, file) => {
       if (!file) return;
+      const problem = checkCarouselImage(file);
+      if (problem) { showMessage('error', `Slide ${i + 1}: ${problem}`); return; }
       setUploading(i);
       try {
         const fd = new FormData();
         fd.append('image', file);
         const res = await authFetch(`${API_URL}/admin/content/upload-image`, { method: 'POST', body: fd });
-        const d = await res.json();
+        const d = await res.json().catch(() => ({}));
         if (d.success && d.url) {
-          const u = [...slides]; u[i] = { ...u[i], url: d.url }; setSlides(u);
-          showMessage('success', 'Image uploaded');
-        } else showMessage('error', d.message || 'Upload failed');
-      } catch { showMessage('error', 'Upload failed'); }
+          // Functional update: the upload takes a few seconds and the user may edit meanwhile.
+          setSlides(prev => { const u = [...prev]; u[i] = { ...u[i], url: d.url }; return u; });
+          showMessage('success', 'Image uploaded — press Save Carousel to publish it');
+        } else if (res.status === 401 || res.status === 403) {
+          showMessage('error', 'Your admin session has expired — sign out and sign in again, then retry the upload');
+        } else showMessage('error', `Slide ${i + 1}: ${d.message || d.error || `upload failed (error ${res.status})`}`);
+      } catch { showMessage('error', 'Upload failed — check your internet connection and try again'); }
       finally { setUploading(-1); }
     };
 
@@ -1804,20 +2063,18 @@ const ContentTab = ({ showMessage }) => {
         {/* How it works — explains why this may look empty and how to take control */}
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-sm text-amber-100 space-y-1">
           <p className="font-semibold text-amber-300">How the carousel works</p>
-          <p>Your homepage currently shows the <strong>built-in default images</strong>. As soon as you upload one or more images here and press <strong>Save</strong>, your images fully replace the defaults.</p>
+          <p>The homepage carousel shows <strong>only the photos you upload here</strong>, in this order. Upload a photo into each slide, then press <strong>Save Carousel</strong>.</p>
+          <p>• Photos must be <strong>JPG, PNG or WEBP</strong> and <strong>{MAX_IMAGE_MB}MB or smaller</strong>. Landscape photos look best.</p>
           <p>• Use <strong>▲ ▼</strong> to reorder slides, <strong>Remove</strong> to delete one.</p>
-          <p>• A slide with no uploaded photo is skipped on the site.</p>
-          <p>• To go back to the default images, remove <strong>all</strong> slides and Save.</p>
+          <p>• A slide without a photo is <strong>not shown</strong> on the homepage. If no slide has a photo, the carousel is empty.</p>
         </div>
 
         {slides.length === 0 && (
           <div className="bg-white/5 border border-dashed border-white/20 rounded-xl p-6 text-center space-y-3">
-            <p className="text-purple-200 text-sm">No custom slides yet — the homepage is showing the built-in default images.</p>
+            <p className="text-purple-200 text-sm">No slides yet — the homepage carousel is empty. Add a slide and upload a photo.</p>
             <div className="flex flex-wrap gap-2 justify-center">
               <button onClick={() => setSlides([{ url: '', caption: '', subtitle: '' }])} className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm"><FiPlus /> Add your first slide</button>
-              <button onClick={() => setSlides(DEFAULT_CAROUSEL.map(s => ({ ...s })))} className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm"><FiImage /> Start from default captions</button>
             </div>
-            <p className="text-purple-400 text-xs">“Start from default captions” fills in the current slide wording — just upload a photo into each one.</p>
           </div>
         )}
 
@@ -1835,7 +2092,7 @@ const ContentTab = ({ showMessage }) => {
               ? <img src={slide.url} alt="" className="w-full h-40 object-cover rounded-lg" />
               : <div className="w-full h-40 bg-white/5 rounded-lg flex flex-col items-center justify-center text-purple-300 text-sm gap-1">
                   <span>No image yet</span>
-                  <span className="text-amber-300/80 text-xs px-4 text-center">Upload a photo — this slide is skipped on the site until you do.</span>
+                  <span className="text-amber-300/80 text-xs px-4 text-center">No photo — this slide is NOT shown on the homepage until you upload one (JPG/PNG/WEBP, max {MAX_IMAGE_MB}MB).</span>
                 </div>}
             <label className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm cursor-pointer w-fit">
               <FiUpload /> {uploading === i ? 'Uploading...' : (slide.url ? 'Replace Image' : 'Upload Image')}
@@ -1851,7 +2108,7 @@ const ContentTab = ({ showMessage }) => {
         {slides.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={() => setSlides([...slides, { url: '', caption: '', subtitle: '' }])} className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm"><FiPlus /> Add Slide</button>
-            <button onClick={() => { if (window.confirm('Remove all slides and go back to the built-in default images?')) setSlides([]); }} className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-red-300 rounded-lg text-sm"><FiTrash2 /> Reset to defaults</button>
+            <button onClick={() => { if (window.confirm('Remove all slides? The homepage carousel will be empty until you add new ones and save.')) setSlides([]); }} className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-red-300 rounded-lg text-sm"><FiTrash2 /> Remove all slides</button>
           </div>
         )}
 
@@ -1862,7 +2119,12 @@ const ContentTab = ({ showMessage }) => {
           </button>
           <FloatingSave onClick={() => handleSave('home_hero', { slides })} saving={saving} label={'Save Carousel'} />
           {slides.length > 0 && withImages === 0 && (
-            <span className="text-amber-300 text-xs">No photos uploaded yet — the site keeps showing the default images until you add at least one.</span>
+            <span className="text-red-300 text-xs font-semibold">No slide has a photo — the homepage carousel will be empty. Upload at least one photo before saving.</span>
+          )}
+          {withImages > 0 && withImages < slides.length && (
+            <span className="text-amber-300 text-xs font-semibold">
+              {slides.length - withImages} slide(s) have no photo and won't appear on the homepage: Slide {slides.map((s, n) => (s && s.url ? null : n + 1)).filter(Boolean).join(', ')}.
+            </span>
           )}
         </div>
       </div>
@@ -1872,6 +2134,9 @@ const ContentTab = ({ showMessage }) => {
   const sections = [
     { key: 'about', label: 'About Us' },
     { key: 'getting_around', label: 'Getting Around' },
+    { key: 'location', label: 'Location & Reviews' },
+    { key: 'booking_settings', label: 'Booking Settings' },
+    { key: 'rooms_page', label: 'Rooms Page' },
     { key: 'house_rules', label: 'House Rules' },
     { key: 'footer', label: 'Footer' },
     { key: 'comparison', label: 'Comparison' },
@@ -1894,9 +2159,12 @@ const ContentTab = ({ showMessage }) => {
       </div>
 
       {loading ? <div className="text-center text-purple-200">Loading content...</div> : (
-        <>
+        <div data-tour="content-editor">
           {activeSection === 'about' && <AboutEditor />}
           {activeSection === 'getting_around' && <GettingAroundEditor />}
+          {activeSection === 'location' && <LocationEditor />}
+          {activeSection === 'booking_settings' && <BookingSettingsEditor />}
+          {activeSection === 'rooms_page' && <RoomsPageEditor />}
           {activeSection === 'house_rules' && <HouseRulesEditor />}
           {activeSection === 'footer' && <FooterEditor />}
           {activeSection === 'comparison' && <ComparisonEditor />}
@@ -1909,7 +2177,7 @@ const ContentTab = ({ showMessage }) => {
             <PolicyEditor storeKey="privacy_policy" heading="Privacy Policy" defaults={DEFAULT_PRIVACY}
               help="Each section is a card on the Privacy Policy page. Edit the title and paragraphs; the icon is set automatically by position." />
           )}
-        </>
+        </div>
       )}
     </div>
   );
@@ -2106,6 +2374,11 @@ const Hero = ({ onLogout }) => {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [stats, setStats] = useState({ total: 0, confirmed: 0, pending: 0 });
   const adminName = sessionStorage.getItem('admin_name') || 'Admin';
+  const [tourOpen, setTourOpen] = useState(shouldAutoStartTour);
+  const tourNavigate = (step) => {
+    if (step.tab) setActiveTab(step.tab);
+    tourRequest({ section: step.section, openProperty: !!step.openProperty });
+  };
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
@@ -2149,10 +2422,16 @@ const Hero = ({ onLogout }) => {
               <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 tracking-tight">BookAStay Admin</h1>
               <p className="text-purple-200 mt-1">Logged in as <span className="text-white font-semibold">{adminName}</span></p>
             </div>
+            <div className="flex gap-2 flex-wrap">
+            <button onClick={() => setTourOpen(true)} data-tour="tour-button"
+              className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 rounded-xl transition text-sm font-medium">
+              <FiCompass size={16} /> What's new
+            </button>
             <button onClick={onLogout}
               className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-red-500/30 border border-white/20 hover:border-red-500/40 text-purple-200 hover:text-red-300 rounded-xl transition text-sm font-medium">
               <FiX size={16} /> Sign Out
             </button>
+            </div>
           </div>
           <p className="text-purple-300 text-sm">Manage bookings, properties, discounts, and content</p>
           <div className="grid grid-cols-3 gap-4 mt-4">
@@ -2196,6 +2475,7 @@ const Hero = ({ onLogout }) => {
           </div>
         </div>
       </div>
+      {tourOpen && <AdminTour onNavigate={tourNavigate} onClose={() => setTourOpen(false)} />}
     </div>
   );
 };
