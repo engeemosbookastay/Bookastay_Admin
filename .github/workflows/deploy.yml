@@ -1,25 +1,23 @@
-# Builds the admin and uploads it to the QServers cPanel hosting on every push
-# to main — no manual zips or uploads.
-#
-# One-time setup in GitHub → this repo → Settings → Secrets and variables → Actions:
-#   Secrets:   FTP_SERVER   (e.g. ftp.bookastayng.com)
-#              FTP_USERNAME (a cPanel FTP account whose folder is this site's folder)
-#              FTP_PASSWORD
-#   Variables: VITE_API_URL             (https://bookastay-backend-zuwa.onrender.com)
-#              FTP_SERVER_DIR           (optional; folder to upload into, default ./)
-name: Deploy to cPanel
+# Builds the admin on every push to main and publishes the finished files to the
+# "deploy" branch of this repo. The cPanel server picks up that branch
+# automatically (see deploy/cpanel-sync.sh), so a push is all it takes to go live.
+# No secrets needed — only public settings are used below.
+name: Build for cPanel
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 concurrency:
-  group: deploy-cpanel
-  cancel-in-progress: false
+  group: build-deploy
+  cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,13 +31,14 @@ jobs:
 
       - run: npm run build
         env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_API_URL: https://bookastay-backend-zuwa.onrender.com
 
-      - uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+      - name: Publish build to the deploy branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          local-dir: ./dist/
-          server-dir: ${{ vars.FTP_SERVER_DIR || './' }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: deploy
+          force_orphan: true
+          enable_jekyll: true
+          commit_message: "Build of"
