@@ -1746,12 +1746,15 @@ const ContentTab = ({ showMessage }) => {
   };
 
   // Location & Google reviews (Getting Around page)
+  // The Google business name pins the apartment (and shows Google's live rating
+  // card); a street address can resolve to the street instead. Matches the site.
+  const MAP_QUERY_DEFAULT = 'Engeemos Bookastay Apartments, Abeokuta';
   const LocationEditor = () => {
     const DEFAULT_ADDRESS = 'No. 5 Adesola Babarinde Close, Prof. Adewunmi Abioye Avenue, off Professor, Abeokuta 111105, Ogun State, Nigeria';
     const current = content.location?.value || {};
     const [loc, setLoc] = useState({
       address: current.address || DEFAULT_ADDRESS,
-      map_query: current.map_query || '',
+      map_query: current.map_query || MAP_QUERY_DEFAULT,
       rating: current.rating ?? '',
       review_count: current.review_count ?? '',
       reviews_url: current.reviews_url || '',
@@ -1760,7 +1763,7 @@ const ContentTab = ({ showMessage }) => {
     const rating = Number(loc.rating);
     const ratingInvalid = loc.rating !== '' && !(rating > 0 && rating <= 5);
     const urlInvalid = loc.reviews_url && !/^https?:\/\//i.test(loc.reviews_url.trim());
-    const mapQuery = (loc.map_query || loc.address).trim();
+    const mapQuery = (loc.map_query || MAP_QUERY_DEFAULT).trim();
     const input = 'w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-sm focus:outline-none';
 
     const save = () => {
@@ -1787,8 +1790,8 @@ const ContentTab = ({ showMessage }) => {
         <div>
           <label className="text-purple-300 text-sm">Map search (optional)</label>
           <input value={loc.map_query} onChange={e => set('map_query', e.target.value)} className={input}
-            placeholder="e.g. Engeemos Bookastay, Abeokuta — leave empty to use the address" />
-          <p className="text-purple-300/70 text-xs mt-1">If the map pin isn't exactly on the property, type the business name as it appears on Google Maps, or the coordinates (e.g. 7.1557, 3.3451).</p>
+            placeholder="Engeemos Bookastay Apartments, Abeokuta" />
+          <p className="text-purple-300/70 text-xs mt-1">Use the business name exactly as it appears on Google Maps — that pins the apartment and shows Google's live rating on the map. A street address can land on the street instead.</p>
         </div>
         <div className="rounded-lg overflow-hidden border border-white/10 h-56">
           <iframe title="Map preview" src={`https://maps.google.com/maps?q=${encodeURIComponent(mapQuery)}&t=m&z=16&output=embed`}
